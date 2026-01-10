@@ -25,12 +25,16 @@ local Photos = {
 	},
 }
 -- load the classes locally
-dofile(hs.spoons.resourcePath 'common.lua')
-local MediaItem = dofile(hs.spoons.resourcePath 'LazyMediaItem.lua')
+-- dofile(hs.spoons.resourcePath 'common.lua')
+local item = dofile(hs.spoons.resourcePath 'item.lua')
+Photos.mediaItem = item.mediaItem
+Photos.album = item.album
+Photos.folder = item.folder
+
 -- local Album = dofile(hs.spoons.resourcePath 'Album.lua')
 -- local Folder = dofile(hs.spoons.resourcePath 'Folder.lua')
 -- also expose them publically
-Photos.MediaItem = MediaItem
+-- Photos.MediaItem = MediaItem
 -- Photos.Album = Album
 -- Photos.Folder = Folder
 
