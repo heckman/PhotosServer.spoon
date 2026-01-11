@@ -4,6 +4,7 @@
   "workspace.library": [
     "/Users/erik/.config/hammerspoon/Spoons/EmmyLua.spoon/annotations/"
   ],
+  ".workspace.ignoreDir": ["~*"],
   "diagnostics.libraryFiles": "Disable",
-  "semantic.annotation": false
+  "diagnostics.ignoredFiles": "Disable"
 }

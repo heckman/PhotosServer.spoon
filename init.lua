@@ -3,7 +3,9 @@
 --- Control the Photos application, directly or via an http interface
 ---
 ---
----
+--- Notes
+---  - some returns of MediaItems and Containers are actually just lists of ids.
+---  - when do we fetch the details of objects?
 ---
 ---
 
@@ -11,49 +13,28 @@ local Photos = {
 	name = 'Photos',
 	version = '1.0',
 	author = 'Erik Ben Heckman <erik@heckman.ca>',
+	description = 'Lua interface to the Photos application.',
 	homepage = 'https://github.com/Heckman/Photos.spoon',
 	license = 'MIT - https://opensource.org/licenses/MIT',
-
-	-- defaut options, override by calling:
-	--   Photos{options} or Photos.
-	-- or when creating the Spoon: hs.loadSpoon 'Photos' {options}
-	-- (I think this will work but haven't tried it yet))
-	options = {
-		scheme = 'http',
-		host = 'photos.local',
-		port = 80,
-	},
 }
--- load the classes locally
--- dofile(hs.spoons.resourcePath 'common.lua')
-local item = dofile(hs.spoons.resourcePath 'item.lua')
-Photos.mediaItem = item.mediaItem
-Photos.album = item.album
-Photos.folder = item.folder
+Photos.Objects = dofile(hs.spoons.resourcePath 'objects.lua')
+Photos.Application = dofile(hs.spoons.resourcePath 'application.lua')
 
--- local Album = dofile(hs.spoons.resourcePath 'Album.lua')
--- local Folder = dofile(hs.spoons.resourcePath 'Folder.lua')
--- also expose them publically
--- Photos.MediaItem = MediaItem
--- Photos.Album = Album
--- Photos.Folder = Folder
+local server -- only load this if we start
 
--- for submodule in { "server" } do
--- 	_ENV[submodule] = dofile(hs.spoons.resourcePath(submodule..'.lua'))
--- end
+---
+--- Methods
+-----------
+
+function Photos:init() end
 
 function Photos:start()
-	self.server = dofile(hs.spoons.resourcePath 'server.lua')(M.options)
-	self.server.start(self)
+	server = dofile(hs.spoons.resourcePath 'server.lua')(Photos)
+	server.start()
 end
 
 function Photos:stop()
-	if self.server then self.server.stop() end
-end
-
-function Photos:error_alert(err)
-	--hs.alert.show(hs.inspect { err, self })
-	error(hs.inspect { err, self }, 2)
+	if server then server:stop() end
 end
 
 -- function M:bindHotkeys(mapping)
@@ -61,11 +42,63 @@ end
 -- hs.spoons.bindHotkeysToSpec(def, mapping)
 -- end
 
-return setmetatable(Photos, {
-	__call = function(self, options)
-		for k, v in pairs(options) do
-			self.options[k] = v
-		end
-		return self
-	end,
-})
+---
+--- utiliy functions
+--- -----------------
+
+---@alias PhotosError [string, table]
+
+---@param message string
+function Photos.errorAlert(message)
+	local style = {
+		strokeWidth = 12,
+		strokeColor = { red = 1, alpha = 1 },
+		fillColor = { black = 0, alpha = 0.75 },
+		textColor = { white = 1, alpha = 1 },
+		textFont = '.AppleSystemUIFont',
+		textSize = 27,
+		radius = 27,
+		atScreenEdge = 0,
+		fadeInDuration = 0.15,
+		fadeOutDuration = 0.15,
+		padding = 27,
+	}
+	hs.alert.show(message, style, 3)
+end
+
+---@param jxa string -- javascript to execute
+---@return any? -- note that nil may be a successful result
+---@overload fun(jxa: string): nil, table -- error always included on failure
+function Photos.jxaExec(jxa)
+	jxa = 'Application("Photos").' .. jxa
+	local ok, results, err = hs.osascript.javascript(jxa)
+	if ok then return results end
+	---@cast err table
+	local alert = err.OSAScriptErrorMessageKey:gsub('^Error: ', '')
+	local number = err.OSAScriptErrorNumberKey
+	err = setmetatable({
+		message = string.format('JXA: %s (%s)', alert, number),
+		data = { number = number, jxa = jxa },
+	}, {
+		__tostring = function(self)
+			return string.format(
+				[[%s
+```
+%s
+```
+]],
+				self.message,
+				self.data.jxa
+			)
+		end,
+	})
+	Photos.errorAlert(alert)
+	print(err)
+
+	return nil, err
+end
+
+Photos.Application(Photos)
+Photos.Objects(Photos)
+
+return setmetatable(Photos, { Photos.Application })
