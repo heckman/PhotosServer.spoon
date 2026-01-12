@@ -70,7 +70,7 @@ end
 ---@return any? -- note that nil may be a successful result
 ---@overload fun(jxa: string): nil, table -- error always included on failure
 function Photos.jxaExec(jxa)
-	jxa = 'Application("Photos").' .. jxa
+	jxa = 'app=Application("Photos");' .. jxa
 	local ok, results, err = hs.osascript.javascript(jxa)
 	if ok then return results end
 	---@cast err table

@@ -1,15 +1,13 @@
 Objects = {}
 
 ---@class MediaItem
----@field _type 'MediaItem'
----@field _id string
+---@field pcls 'MediaItem'
+---@field id string
 ---@field keywords string[] | nil
 ---@field name string? -- AKA the title
 ---@field description string?
 ---@field favorite boolean?
 ---@field date number? -- in seconds since unix epoch
----@field id string -- includes a suffix starting with /
----@field bid string -- base id (without suffix)
 ---@field height number? -- in pixels
 ---@field width number? -- in pixels
 ---@field filename string -- no directory information
@@ -19,14 +17,14 @@ Objects = {}
 ---@field label string
 
 ---@class Album
----@field _type 'Album'
----@field _id string
+---@field pcls 'Album'
+---@field id string
 ---@field parent Folder
 ---@field mediaItems MediaItem[]
 
 ---@class Folder
----@field _type 'Folder'
----@field _id string
+---@field pcls 'Folder'
+---@field id string
 ---@field parent Folder
 ---@field albums Album[]
 ---@field folders Folder[]
