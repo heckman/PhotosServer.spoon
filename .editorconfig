@@ -19,7 +19,7 @@ continuation_indent = 4
 max_line_length = 72
 
 #optional keep/never/always/smart
-trailing_table_separator = keep
+trailing_table_separator = smart
 
 # keep/remove/remove_table_only/remove_string_only
 call_arg_parentheses = remove
@@ -40,7 +40,7 @@ space_before_function_call_open_parenthesis = false
 
 space_before_closure_open_parenthesis = true
 
-space_before_function_call_single_arg = true
+space_before_function_call_single_arg = false
 
 space_before_open_square_bracket = false
 
