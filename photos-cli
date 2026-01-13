@@ -53,16 +53,14 @@ commands.ids = {
 commands.export = {
   options: { ...commands.id.options, original: false, open: false },
   description: "Export matching media item from Photos.app",
-  do: function (args, options) {
-    const path = args.pop();
-    const destination = Path(path);
-    // return JSON.stringify([args.join(" "), options]);
-    const item = matching_item(args.join(" "), options);
+  do: function (arguments, options) {
+    const destination = Path(arguments.pop());
+    const item = matching_item(arguments.join(" "), options);
     Application("Photos").export([item], {
       to: destination,
       usingOriginals: options.original,
     });
-
+    console.log(item.id().split("/")[0]);
     if (options.open) open_item(item);
   },
 };
@@ -147,7 +145,7 @@ function items_by_search(query) {
 }
 
 // command, [options,] arguments -> execute command
-function no_run(arguments) {
+function run(arguments) {
   const command_name = arguments.shift();
   try {
     const command = commands[command_name];

@@ -13,18 +13,10 @@ local PS = {
 	license = 'MIT - https://opensource.org/licenses/MIT',
 }
 
-
-
-
----@class HttpServer
----@field setName fun(self, name: string)
----@field setInterface fun(self, interface: string)
----@field setPort fun(self, port: number)
----@field setCallback fun(self, callback: function)
----@field start fun(self)
----@field stop fun(self)
----@type HttpServer
-local Server = hs.httpserver.new(false, true) or {}
+PS.name = 'Photos'
+PS.host = '127.0.0.3'
+PS.port = 6330
+PS.timeout = 11 -- seconds to wait for Photos App to respond befroe aborting
 
 
 local tempDir -- unnamed until it is created
@@ -41,8 +33,11 @@ local function loadResource(resource)
 	return io.open(hs.spoons.resourcePath(resource), 'r'):read'*a'
 end
 
+local function info(...)
+	hs.printf(...)
+end
 local function httpError(code, message)
-	print(string.format('Error %d: %s', code, hs.inspect(message)))
+	info('Returning HTTP Error %d: %s', code, hs.inspect(message))
 	local e = PS.httpErrors[code] or PS.httpErrors[500]
 	return e.errorBody, e.errorCode, {
 		['Content-Type'] = 'svg+xml',
@@ -52,24 +47,25 @@ local function httpError(code, message)
 	}
 end
 
-
-local function callPhotosLegacyCli(command, arguments, options)
-	local jax = string.format([[
-command=commands.%s;
-command.do(%s,{ ...command.options, timeout: 12, ...%s });
-]],
-		command,
-		string.gsub(hs.json.encode(arguments), '\\/',
-			'/'), hs.inspect(options):gsub('=', ':'))
-	-- print(hs.inspect(command))
-	-- print(hs.inspect(arguments), hs.json.encode(arguments))
-	-- print(hs.inspect(options), hs.json.encode(options))
-	print(jax)
-	return hs.osascript.javascript(PS.PhotosLegacyCli .. jax)
-end
-
 local function shQuote(x)
 	return '\'' .. string.gsub(x, '\'', "\'\\'\'") .. '\''
+end
+
+
+local function fileResponse(path, filename)
+	filename = filename or path:find'[^/]+$'
+	local photoBytes, err = io.open(path, 'rb'):read'*a'
+	if not photoBytes then return nil, err end
+	local size = tostring(#photoBytes)
+	if not photoBytes then return nil, err end
+	local mime = hs.fs.fileUTIalternate(hs.fs.fileUTI(path),
+		'mime')
+	if not mime then return nil, err end
+	return photoBytes, 200, {
+		['Content-Type'] = mime,
+		['Content-Length'] = size,
+		['Content-Disposition'] = 'inline; filename=' .. filename,
+	}
 end
 
 ---@param method 'GET'|'HEAD'|'POST'|'PUT'|'DELETE'|'CONNECT'|'OPTIONS'|'TRACE'|'PATCH'
@@ -78,39 +74,45 @@ end
 ---@param requestBody string
 ---@return string, integer, table
 local function httpResponse(method, path, requestHeaders, requestBody)
+	info('\n-- http request:\t%s\t%s\n%s\n\n%s',
+		method, path, hs.inspect(requestHeaders), requestBody
+	)
+	local body, code, headers
+
 	if method ~= 'GET' then return '', 405, {} end
+	---@class hs.http
+	---@field urlParts fun(path: string): table
 	local _ = hs.http.urlParts(path).pathComponents
 	local identifier, action = _[2] or '', _[3] or ''
-	print('request for: ' .. identifier .. ' / ' .. action)
 
+	-- return not found for root and favicon
 	if string.find(identifier, '^favicon') or
 	string.find(identifier, '^%s*$') then
-		return httpError(404)
+		body, code, headers = fileResponse(PS.favicon)
+		if not body then
+			return httpError(500,
+				'Unable to load favicon.ico.')
+		end
+		---@cast headers table
+		return body, code, headers
 	end
 
+	-- make temporary directory for this request
 	if not makeTempDir() then return httpError(500) end
-	print('tempDir:', tempDir)
 
-	local options = '--timeout 11'
+	-- call cli to export photo from Photos App
+	local options = '--timeout ' .. PS.timeout
 	if (action == 'open') then options = options .. ' --open' end
-
-	local cli = string.format(
-		'photos-cli export %s %s %s 2>&1',
-		options, shQuote(identifier), tempDir
+	local cli = string.format('%s export %s %s %s 2>&1',
+		PS.photoCli, options, shQuote(identifier), tempDir
 	)
-	print(cli)
-	local out, ok = hs.execute(cli)
+	info('-- photos-cli command:\n%s', cli)
+	local photoId, ok = hs.execute(cli)
+	info('-- media item found: %s', photoId)
+	if not ok then return httpError(500) end
+	---@cast photoId string
 
-	-- local ok, out, err = callPhotosLegacyCli('export',
-	-- 	{ identifier, tempDir },
-	-- 	{ open = (action == 'open') })
-
-	D{ ok, out }
-	-- if true then return httpError(500, 'debug stop') end
-
-	if not ok then return httpError(500, cli .. '\n>> ' .. out) end
-
-
+	-- get first file in temporary directory (there should only be one)
 	local filename
 	for file in hs.fs.dir(tempDir) do
 		if file ~= '.' and file ~= '..' then
@@ -118,33 +120,70 @@ local function httpResponse(method, path, requestHeaders, requestBody)
 			break
 		end
 	end
-
+	if not filename then
+		return httpError(500,
+			'No file found in tempdir: ' .. tempDir)
+	end
 	if not filename then
 		return httpError(500,
 			'No file found in tempdir: ' .. tempDir)
 	end
 
+	-- read file and generate header data
 	local filepath = tempDir .. '/' .. filename
+	body, code, headers = fileResponse(
+		filepath,
+		photoId:gsub('%s*$', '') .. filename:match'%..*$'
+	)
+	if not body then
+		return httpError(500,
+			'Unable to load file "' .. filepath .. '".')
+	end
+	---@cast headers table
+	local photoBytes = io.open(filepath, 'rb'):read'*a'
+	local size = tostring(#photoBytes)
 	local mime = hs.fs.fileUTIalternate(hs.fs.fileUTI(filepath),
 		'mime')
 
-	local photoBytes = io.open(filepath, 'rb'):read'*a'
+	-- remove temporary file and directory
+	local err
+	ok, err = os.remove(filepath)
+	if not ok then
+		info(
+			'Error removing file "%s". %s',
+			filepath, err
+		)
+	end
+	ok, err = hs.fs.rmdir(tempDir)
+	if not ok then
+		info(
+			'Error removing temporary directory "%s". %s',
+			tempDir, err
+		)
+	end
 
-	-- if not os.remove(filepath) then print(err) end
-	-- if not hs.fs.rmdir(tempDir) then print(err) end
+	info('-- http response:\n%s',
+		hs.inspect(headers))
 
-	return photoBytes, 200, {
-		['Content-Type'] = mime,
-		['Content-Length'] = tostring(#photoBytes),
-		['Content-Disposition'] = 'inline; filename=' .. filename,
-	}
+	-- send the image as an http response
+	return body, code, headers
 end
 
+---@class HttpServer
+---@field setName fun(self, name: string)
+---@field setInterface fun(self, interface: string)
+---@field setPort fun(self, port: number)
+---@field setCallback fun(self, callback: function)
+---@field start fun(self)
+---@field stop fun(self)
 function PS:init()
-	Server:setName'Photos'
-	Server:setInterface'127.0.0.3'
-	Server:setPort(6331)
-	Server:setCallback(httpResponse)
+	---@type HttpServer?
+	PS.Server = hs.httpserver.new(false, true)
+	if not PS.Server then return nil end
+	PS.Server:setName(PS.name)
+	PS.Server:setInterface(PS.host)
+	PS.Server:setPort(PS.port)
+	PS.Server:setCallback(httpResponse)
 	PS.httpErrors = {
 		[500] = {
 			errorCode = 500,
@@ -157,12 +196,12 @@ function PS:init()
 			errorBody = loadResource'error404.svg',
 		},
 	}
-
-	PS.PhotosLegacyCli = loadResource'photos-cli'
+	PS.photoCli = hs.spoons.resourcePath'photos-cli'
+	PS.favicon = hs.spoons.resourcePath'favicon.ico'
 end
 
-function PS:start() return Server and Server:start() end
+function PS:start() return PS.Server and PS.Server:start() end
 
-function PS:stop() return Server and Server:stop() end
+function PS:stop() return PS.Server and PS.Server:stop() end
 
 return PS
