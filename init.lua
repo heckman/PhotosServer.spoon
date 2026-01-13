@@ -85,13 +85,13 @@ local function httpResponse(method, path, requestHeaders, requestBody)
 	local _ = hs.http.urlParts(path).pathComponents
 	local identifier, action = _[2] or '', _[3] or ''
 
-	-- return not found for root and favicon
-	if string.find(identifier, '^favicon') or
-	string.find(identifier, '^%s*$') then
-		body, code, headers = fileResponse(PS.favicon)
+	-- serve static file if one is specified
+	if PS.static[identifier] then
+		body, code, headers = fileResponse(PS.static[identifier],
+			identifier)
 		if not body then
 			return httpError(500,
-				'Unable to load favicon.ico.')
+				'Unable to load ' .. identifier)
 		end
 		---@cast headers table
 		return body, code, headers
@@ -197,7 +197,13 @@ function PS:init()
 		},
 	}
 	PS.photoCli = hs.spoons.resourcePath'photos-cli'
-	PS.favicon = hs.spoons.resourcePath'favicon.ico'
+	-- static images to serve
+	PS.static = {
+		['favicon.ico'] = hs.spoons.resourcePath'favicon.ico',
+		['apple-touch-icon.png'] = hs.spoons.resourcePath'apple-touch-icon.png',
+	}
+	-- image to serve when there is no path specified
+	PS.static[''] = PS.static['apple-touch-icon.png']
 end
 
 function PS:start() return PS.Server and PS.Server:start() end
