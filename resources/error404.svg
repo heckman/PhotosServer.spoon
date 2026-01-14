@@ -5,9 +5,11 @@
   SVG hand-coded by github user diachedelic (https://gist.github.com/diachedelic)
   source: https://gist.github.com/diachedelic/cbb7fdd2271afa52435b7d4185e6a4ad
   accessed: 2024-02-12
+  then Erik Heckman (https://github.com/heckman) added a white background.
 -->
 <svg viewBox="0 0 14 16" version="1.1" xmlns="http://www.w3.org/2000/svg">
   <g id="borders-and-backgrounds">
+    <path d="M0,0 L11,0 l0,1 l1,0 l0,1 l1,0 l0,1 l1,0 L14,16 L 0,16 Z" fill="#ffffff"></path>
     <path d="M0,0 L10,0 L10,1 L1,1 L1,15 L2,15 L2,16 L0,16 Z" fill="black"></path>
     <path d="M10,4 l4,0 l0,3 l-1,0 l0,-2 l-3,0 Z" fill="black"></path>
     <path d="M14,16 l0,-6 l-1,0 l0,5 l-5,0 l0,1 Z" fill="black"></path>
