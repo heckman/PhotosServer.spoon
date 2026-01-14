@@ -13,22 +13,11 @@ local PS = {
 	license = 'MIT - https://opensource.org/licenses/MIT',
 }
 
-PS.name = 'Photos'
-PS.host = '127.0.0.3'
-PS.port = 6330
-PS.timeout = 11 -- seconds to wait for Photos App to respond befroe aborting
-
-
-local function info(...)
-	hs.printf(...)
+local function info(message)
+	print(message)
+	return message
 end
 
-local function resourcePath(resource)
-	return hs.spoons.resourcePath('resources/' .. resource)
-end
-local function loadResource(resource)
-	return io.open(resourcePath(resource), 'r'):read'*a'
-end
 
 local function aFileIn(dir)
 	for file in hs.fs.dir(dir) do
@@ -42,24 +31,22 @@ local function cleanup(dir)
 	if not dir then return end
 	local filepath = aFileIn(dir)
 	if filepath then
-		local ok, err = os.remove(filepath)
-		if not ok then
-			info(
-				'Error removing temporary file "%s". %s',
-				filepath, err
-			)
-		end
-	end
-	local ok, err = hs.fs.rmdir(dir)
-	if not ok then
-		info(
-			'Error removing temporary directory "%s". %s',
-			dir, err
+		assert(
+			os.remove(filepath),
+			'Error removing file "' .. filepath .. '".'
 		)
 	end
+	assert(
+		hs.fs.rmdir(dir),
+		'Error removing temporary directory: ' .. dir
+	)
 end
 
----@return string?, function?
+-- Create a directory within the user's temporary directory with
+-- the provided basename appended with a very long random string.
+--
+---@param basename string
+---@return string | nil  directory-name or nil if unsuccesssful
 local function makeTempDir(basename)
 	local dirname = string.format('%s%s%s',
 		hs.fs.temporaryDirectory(),
@@ -69,175 +56,169 @@ local function makeTempDir(basename)
 	return ok and dirname or nil
 end
 
----@return string, integer, table
-local function serveContent(code, content, filename, mimetype)
-	local headers = {
-		['Content-Type'] = mimetype,
-		['Content-Length'] = tostring(#content),
-		['Content-Disposition'] = 'inline; filename=' .. filename,
-	}
-	info(
-		'-- http response %s:\n%s', code, hs.inspect(headers)
-	)
-	return content, code, headers
-end
-
----@param code integer
----@param tempDir string
----@param messageFormat string
----@vararg any
----@return string, integer, table
-local function serveError(code, tempDir, messageFormat, ...)
-	messageFormat = messageFormat or 'Unknown error.'
-	info('-- ERROR: ' .. messageFormat, ...)
-	cleanup(tempDir)
-	local e = PS.httpErrors[code] or PS.httpErrors[500]
-	if not e.content then return '', code, e.headers end
-	return serveContent(code, e.content, e.filename, e.mimetype)
-end
-
----@return string, integer, table
-local function serveFile(filepath, filename, tempDir)
+-- Read a file and return its contents and appropriate response headers
+--
+---@param filepath string the absolute path to the file.
+---@param filename? string serve the file with this filename in its content-disposition field; defaults to the last part of the path.
+---@return table headers, string body the response headers and file contents.
+---@fallible
+local function readFile(filepath, filename)
+	---@cast filename string
 	filename = filename or filepath:find'[^/]+$'
 
-	local content = assert(io.open(filepath, 'r'):read'*a',
-		{ 500, tempDir, 'Unable to read file "%s".', filepath })
-
-	local mimetype = assert(hs.fs.fileUTIalternate(
-			hs.fs.fileUTI(filepath),
-			'mime'),
-		{ 500, tempDir, 'Unable to get mime type for "%s".',
-			filepath }
+	local file_contents = assert(
+		io.open(filepath, 'r'):read'*a',
+		'Unable to read file "' .. filepath .. '".'
 	)
-	cleanup(tempDir)
 
-	return serveContent(200, content, filename, mimetype)
+	local file_mimetype = assert(
+		hs.fs.fileUTIalternate(hs.fs.fileUTI(filepath), 'mime'),
+		'Unable to get mime type for "..filepath..".'
+	)
+
+	return {
+		['Content-Type'] = file_mimetype,
+		['Content-Length'] = tostring(#file_contents),
+		['Content-Disposition'] = 'inline; filename=' .. filename,
+	}, file_contents
 end
 
+-- Export a media item from the Photos App to the specified directory.
+--
+---@param identifier string the uuid of the media item
+---@param destination string the directory to export the file to
+---@return boolean successful
 local function exportMediaItem(identifier, destination)
-	return hs.osascript.javascript(
-		string.format(
-			[[
+	---@class hs.osascript
+	---@field javascript fun(source: string): boolean, any?, string|table
+
+	return ( -- only return the first value
+		hs.osascript.javascript(
+			string.format(
+				[[
 Application("Photos").export(
 	[Application("Photos").mediaItems.byId("%s")],
 	{ to:Path("%s"), usingOriginals:%s }
 );]],
-			identifier, destination, 'false'
+				identifier, destination, 'false'
+			)
 		)
 	)
 end
 
----@return string, integer, table
-local function httpResponse(method, path, requestHeaders, requestBody)
-	info(
-		'\n-- http request:\t%s\t%s\n%s\n\n%s',
-		method, path, hs.inspect(requestHeaders), requestBody
-	)
-
-	assert(method == 'GET', { 405, nil, 'Unsupported HTTP method.' })
-
-	-- the first path component is the leading /
-	local identifier = hs.http.urlParts(path).pathComponents[2] or ''
-
-	if PS.static[identifier] then
-		return serveFile(PS.static[identifier])
+-- Load the specified media item and return its contents
+-- along with the appropriate response headers.
+--
+---@return integer code, table headers, string content
+local function loadMediaItem(uuid, destination)
+	if exportMediaItem(uuid, destination) then
+		local path = assert(
+			aFileIn(destination),
+			'No file found in directory: ' .. destination
+		)
+		info('-- Mediaedia item exported to: ' .. path)
+		-- filename = uuid + extension of exported file
+		return 200, readFile(path, uuid .. path:match'%..*$')
+	else
+		info('-- Media item not found for: ' .. uuid)
+		return 404, readFile(PS.static[404])
 	end
-
-	local tempDir = assert(
-		makeTempDir'hammerspoon-photos-server-',
-		{ 500, nil, 'Cannot create a temporary directory.' }
-	)
-
-	info('-- exporting media item "%s" to "%s"', identifier, tempDir)
-
-	assert(
-		exportMediaItem(identifier, tempDir),
-		{ 404, tempDir, 'Media item "%s" not found.', identifier }
-	)
-	local filepath = assert(
-		aFileIn(tempDir),
-		{ 500, tempDir, 'No file found in tempdir: %s', tempDir }
-	)
-	info('-- media item exported to "%s"', filepath)
-
-	local filename = identifier .. filepath:match'%..*$'
-	info('-- serving media item as "%s".', filename)
-
-	return serveFile(
-		filepath, filename, tempDir
-	)
 end
 
-
-
+-- Handle http requests
+--
 ---@param method 'GET'|'HEAD'|'POST'|'PUT'|'DELETE'|'CONNECT'|'OPTIONS'|'TRACE'|'PATCH'
 ---@param path string
 ---@param requestHeaders table
 ---@param requestBody string
 ---@return string, integer, table
 local function httpHandler(method, path, requestHeaders, requestBody)
-	local ok, content, response_code, response_headers =
-	    pcall(
-		    httpResponse,
-		    method, path, requestHeaders, requestBody
-	    )
-	if ok then
-		return content, response_code, response_headers
-	else
-		---@diagnostic disable-next-line: param-type-mismatch
-		return serveError(table.unpack(content))
+	info('\n-- http request:' .. method .. '\t"' .. path .. '"')
+
+	-- we only accept GET requests
+	if method ~= 'GET' then
+		info'-- Unsupported HTTP method.'
+		return '', 405, { Allow = 'GET' }
 	end
+
+	-- if the path is a static file then serve it
+	if PS.static[path] then
+		local ok, headers, content = pcall(
+			readFile, PS.static[path], path
+		)
+		if ok then return content, 200, headers end
+		info('-- Cannot read static file: ' .. PS.static[path])
+		return PS.serverError()
+	end
+
+	-- create a temporary directory to expoer the media item to
+	local tempDir = makeTempDir'hammerspoon-photos-server-'
+	if not tempDir then
+		info'-- Cannot create a temporary directory.'
+		return PS.serverError()
+	end
+
+	-- load the contents of the media item and its appropriate headers
+	-- if no media item is found this will be a 404 response
+	local ok, code, headers, content = xpcall(
+		loadMediaItem, info,
+		---@class hs.http
+		---@field urlParts fun(path: string): table
+		hs.http.urlParts(path).pathComponents[2] or '', tempDir
+	)
+
+	-- remove the temporary directory and the file within
+	-- don't return a server error if the cleanup fails
+	xpcall(cleanup, info, tempDir)
+
+	if ok then return content, code, headers end
+	return PS.serverError()
 end
 
-function PS:init()
-	---@type HttpServer?
-	PS.Server = hs.httpserver.new(false, true)
-	if not PS.Server then return nil end
-	PS.Server:setName(PS.name)
-	PS.Server:setInterface(PS.host)
-	PS.Server:setPort(PS.port)
-	PS.Server:setCallback(httpHandler)
 
-	-- preloaad error responses, so we don't have to worry about
-	-- encountering an error when we're trying to serve an error
-	PS.httpErrors = {
-		[500] = {
-			filename = 'error.svg',
-			content = loadResource'error500.svg',
-			mimetype = 'svg+xml',
-		},
-		[404] = {
-			filename = 'missing.svg',
-			content = loadResource'error404.svg',
-			mimetype = 'svg+xml',
-		},
-		[405] = {
-			headers = { Allow = 'GET' },
-		},
+function PS:init()
+	PS.Server = assert(hs.httpserver.new(false, true))
+	PS.Server:setCallback(httpHandler)
+	local resourcePath = function (resource)
+		return assert(
+			hs.spoons.resourcePath('resources/' .. resource),
+			'Unable to find resource: ' .. resource
+		)
+	end
+	local loadResource = function (resource)
+		return assert(
+			io.open(resourcePath(resource), 'r'):read'*a',
+			'Unable to read resource: ' .. resource
+		)
+	end
+	-- preloaad content for http 500 server error response,
+	-- to avoid encountering possible errors when serving it.
+	local error = { content = loadResource'error500.svg' }
+	error.header = {
+		['Content-Type'] = 'svg+xml',
+		['Content-Length'] = #error.content,
 	}
-	-- static images to serve
+	PS.serverError = function ()
+		return error.content, 500, error.header
+	end
+
+	-- don't preload the other static responses
 	PS.static = {
-		['favicon.ico'] = resourcePath'favicon.ico',
-		['apple-touch-icon.png'] = resourcePath'apple-touch-icon.png',
+		[404] = resourcePath'error404.svg',
+		['/favicon.ico'] = resourcePath'favicon.ico',
+		['/apple-touch-icon.png'] = resourcePath'apple-touch-icon.png',
 	}
 	PS.static['favicon.png'] = PS.static['apple-touch-icon.png']
 	PS.static[''] = PS.static['apple-touch-icon.png']
 end
 
-function PS:start() return PS.Server and PS.Server:start() end
+function PS:start()
+	PS.Server:setName(PS.name or 'Photos')
+	PS.Server:setInterface(PS.host or '127.0.0.3')
+	PS.Server:setPort(PS.port or 6330)
+	PS.Server:start()
+end
 
-function PS:stop() return PS.Server and PS.Server:stop() end
+function PS:stop() return PS.Server:stop() end
 
 return PS
-
-
----@class hs.http
----@field urlParts fun(path: string): table
-
----@class HttpServer
----@field setName fun(self, name: string)
----@field setInterface fun(self, interface: string)
----@field setPort fun(self, port: number)
----@field setCallback fun(self, callback: function)
----@field start fun(self)
----@field stop fun(self)
