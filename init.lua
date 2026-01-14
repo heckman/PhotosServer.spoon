@@ -214,7 +214,7 @@ end
 
 function PS:start()
 	PS.Server:setName(PS.name or 'Photos')
-	PS.Server:setInterface(PS.host or '127.0.0.3')
+	PS.Server:setInterface(PS.host or 'localhost')
 	PS.Server:setPort(PS.port or 6330)
 	PS.Server:start()
 end
