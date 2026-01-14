@@ -176,7 +176,7 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 end
 
 
-function PS:init()
+function PS:init(config)
 	PS.Server = assert(hs.httpserver.new(false, true))
 	PS.Server:setCallback(httpHandler)
 	local resourcePath = function (resource)
@@ -212,13 +212,23 @@ function PS:init()
 	PS.static[''] = PS.static['apple-touch-icon.png']
 end
 
-function PS:start()
-	PS.Server:setName(PS.name or 'Photos')
-	PS.Server:setInterface(PS.host or 'localhost')
-	PS.Server:setPort(PS.port or 6330)
+---@param config? { name: string, host: string, port: integer }
+function PS:start(config)
+	self:config(config)
+	PS.Server:setName(self.name or 'Photos')
+	PS.Server:setInterface(self.host or 'localhost')
+	PS.Server:setPort(self.port or 6330)
 	PS.Server:start()
 end
 
 function PS:stop() return PS.Server:stop() end
+
+---@param config? { name: string, host: string, port: integer }
+function PS:config(config)
+	if not config then return end
+	if config.name then self.name = config.name end
+	if config.host then self.host = config.host end
+	if config.port then self.port = config.port end
+end
 
 return PS
