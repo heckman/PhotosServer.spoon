@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# link local git hooks into local .git directory
+
+githooks_dir="$(git rev-parse --absolute-git-dir)/hooks" || exit 1
+
+echo '
+zip -r - README.md init.lua resources > PhotosServer.spoon
+' > "$githooks_dir/pre-commit"
