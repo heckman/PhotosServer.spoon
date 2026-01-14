@@ -1,4 +1,4 @@
---- === Photos Server ===
+--- === PhotosServer ===
 ---
 --- Access Photos Library via http.
 ---
@@ -8,8 +8,8 @@ local PS = {
 	name = 'Photos Server',
 	version = '0.1.0',
 	author = 'Erik Ben Heckman <erik@heckman.ca>',
-	description = 'Http interface to the Photos application.',
-	homepage = 'https://github.com/Heckman/Photos.spoon',
+	description = 'Http interface to the Apple Photos Library.',
+	homepage = 'https://github.com/Heckman/PhotosServer.spoon',
 	license = 'MIT - https://opensource.org/licenses/MIT',
 }
 
@@ -175,7 +175,30 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 	return PS.serverError()
 end
 
+---@alias PhotosServer.config { name: string, host: string, port: integer }
+---@class PhotosServer
+---@field config PhotosServer.config
+---@field init fun(): PhotosServer
+---@field start fun(config?: PhotosServer.config): PhotosServer
+---@field stop fun(): PhotosServer
 
+--- PhotosServer:config(config)
+--- Variable
+--- The HTTP server configuration table
+---
+--- Fields:
+---  * name - The bonjour name of the server. Default: `Photos`
+---  * host - The host to serve the HTTP server on. Default: `localhost`
+---  * port - The port to serve the HTTP server on. Default: `6330`
+---
+--- Returns:
+---  * The PhotosServer spoon
+---
+PS.config = {
+	name = 'Photos Server',
+	host = 'localhost',
+	port = 6330,
+}
 function PS:init()
 	PS.Server = assert(hs.httpserver.new(false, true))
 	PS.Server:setCallback(httpHandler)
@@ -208,22 +231,39 @@ function PS:init()
 		['/favicon.ico'] = resourcePath'favicon.ico',
 		['/apple-touch-icon.png'] = resourcePath'apple-touch-icon.png',
 	}
-	PS.static['favicon.png'] = PS.static['apple-touch-icon.png']
-	PS.static[''] = PS.static['apple-touch-icon.png']
+	PS.static['/favicon.png'] = PS.static['apple-touch-icon.png']
+	PS.static['/'] = PS.static['apple-touch-icon.png']
 
 	return self
 end
 
----@param config? { name: string, host: string, port: integer }
+--- PhotosServer:start([config])
+--- Method
+--- Starts the HTTP server.
+---
+--- Parameters:
+---  * config - optional [configuration table](#config). If thie is set, then
+---             PhotosServer:config will be set before starting the server.
+---
+--- Returns:
+---  * The PhotosServer spoon.
+---
 function PS:start(config)
 	self:config(config)
-	PS.Server:setName(self.name or 'Photos')
-	PS.Server:setInterface(self.host or 'localhost')
-	PS.Server:setPort(self.port or 6330)
+	PS.Server:setName(self.config.name)
+	PS.Server:setInterface(self.config.host)
+	PS.Server:setPort(self.config.port)
 	PS.Server:start()
 	return self
 end
 
+--- PhotosServer:stop()
+--- Method
+--- Stops the HTTP server.
+---
+--- Returns:
+---  * The PhotosServer spoon.
+---
 function PS:stop()
 	PS.Server:stop()
 	return self
