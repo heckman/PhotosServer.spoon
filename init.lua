@@ -19,16 +19,14 @@ PS.port = 6330
 PS.timeout = 11 -- seconds to wait for Photos App to respond befroe aborting
 
 
----@return string?, string?
-local function makeTempDir(basename)
-	local dirname = string.format('%s%s%s',
-		hs.fs.temporaryDirectory(),
-		basename,
-		hs.host.globallyUniqueString())
-	local ok, err = hs.fs.mkdir(dirname)
-	if ok then return dirname end
-	return nil, err
+local function info(...)
+	hs.printf(...)
 end
+
+local function loadResource(resource)
+	return io.open(hs.spoons.resourcePath(resource), 'r'):read'*a'
+end
+
 local function aFileIn(dir)
 	for file in hs.fs.dir(dir) do
 		if file ~= '.' and file ~= '..' then
@@ -36,13 +34,6 @@ local function aFileIn(dir)
 		end
 	end
 	return nil
-end
-local function loadResource(resource)
-	return io.open(hs.spoons.resourcePath(resource), 'r'):read'*a'
-end
-
-local function info(...)
-	hs.printf(...)
 end
 local function cleanup(dir)
 	if not dir then return end
@@ -65,6 +56,16 @@ local function cleanup(dir)
 	end
 end
 
+---@return string?, function?
+local function makeTempDir(basename)
+	local dirname = string.format('%s%s%s',
+		hs.fs.temporaryDirectory(),
+		basename,
+		hs.host.globallyUniqueString())
+	local ok = hs.fs.mkdir(dirname)
+	return ok and dirname or nil
+end
+
 ---@return string, integer, table
 local function serveContent(code, content, filename, mimetype)
 	local headers = {
@@ -72,7 +73,6 @@ local function serveContent(code, content, filename, mimetype)
 		['Content-Length'] = tostring(#content),
 		['Content-Disposition'] = 'inline; filename=' .. filename,
 	}
-	cleanup()
 	info(
 		'-- http response %s:\n%s', code, hs.inspect(headers)
 	)
@@ -90,29 +90,15 @@ end
 local function serveFile(filepath, filename, tempDir)
 	filename = filename or filepath:find'[^/]+$'
 
-	local content, err = io.open(filepath, 'r'):read'*a'
-	if not content then
-		info(
-			'Unable to read file "%s".',
-			filepath
-		)
-		cleanup(tempDir)
-		return serveError(500)
-	end
+	local content = assert(io.open(filepath, 'r'):read'*a',
+		{ 500, tempDir, 'Unable to read file "%s".', filepath })
 
-	local mimetype = hs.fs.fileUTIalternate(
-		hs.fs.fileUTI(filepath),
-		'mime'
+	local mimetype = assert(hs.fs.fileUTIalternate(
+			hs.fs.fileUTI(filepath),
+			'mime'),
+		{ 500, tempDir, 'Unable to get mime type for "%s".',
+			filepath }
 	)
-	if not mimetype then
-		info(
-			'Unable to get mime type for "%s".',
-			filepath
-		)
-		cleanup(tempDir)
-		return serveError(500)
-	end
-
 	cleanup(tempDir)
 
 	return serveContent(200, content, filename, mimetype)
@@ -132,76 +118,67 @@ Application("Photos").export(
 end
 
 
+local function httpResponse(method, path, requestHeaders, requestBody)
+	if method ~= 'GET' then return '', 405, {} end
+
+
+	-- the first path component is the leading /
+	local identifier = hs.http.urlParts(path).pathComponents[2] or ''
+
+	if PS.static[identifier] then
+		return serveFile(PS.static[identifier])
+	end
+
+	local tempDir = assert(
+		makeTempDir'hammerspoon-photos-server-',
+		{ 500, nil, 'Cannot create a temporary directory.' }
+	)
+
+	info('-- exporting media item "%s" to "%s"', identifier, tempDir)
+
+	assert(
+		exportMediaItem(identifier, tempDir),
+		{ 404, tempDir, 'Media item "%s" not found.', identifier }
+	)
+
+	local filepath = assert(
+		aFileIn(tempDir),
+		{ 500, tempDir, 'No file found in tempdir: %s', tempDir }
+	)
+
+	return serveFile(
+		filepath, identifier .. filepath:match'%..*$', tempDir
+	)
+end
+
+---@param err [ integer, string, string, ... ]
+local function errorHandler(err)
+	info(table.unpack(err, 3)) -- error message to format
+	cleanup(err[2])     -- tempDir
+	return err[1]       -- http error code
+end
 
 ---@param method 'GET'|'HEAD'|'POST'|'PUT'|'DELETE'|'CONNECT'|'OPTIONS'|'TRACE'|'PATCH'
 ---@param path string
 ---@param requestHeaders table
 ---@param requestBody string
 ---@return string, integer, table
-local function httpResponse(method, path, requestHeaders, requestBody)
+local function httpHandler(method, path, requestHeaders, requestBody)
 	info('\n-- http request:\t%s\t%s\n%s\n\n%s',
 		method, path, hs.inspect(requestHeaders), requestBody
 	)
-	if method ~= 'GET' then return '', 405, {} end
-
-	---@class hs.http
-	---@field urlParts fun(path: string): table
-
-	-- the first path component is the leading /
-	local identifier = hs.http.urlParts(path).pathComponents[2] or ''
-	-- serve static file if one is specified
-	if PS.static[identifier] then
-		return serveFile(PS.static[identifier])
+	local ok, content, response_code, response_headers =
+	    xpcall(
+		    httpResponse, errorHandler,
+		    method, path, requestHeaders, requestBody
+	    )
+	if ok then
+		return content, response_code, response_headers
+	else
+		return serveError(content)
 	end
-
-	-- make temporary directory for this request
-	local tempDir = makeTempDir'hammerspoon-photos-server-'
-	if not tempDir then
-		info'Cannot create a temporary directory.'
-		return serveError(500)
-	end
-
-	info(
-		'-- exporting media item "%s" to "%s"',
-		identifier, tempDir
-	)
-
-	local ok = exportMediaItem(identifier, tempDir)
-	if not ok then
-		info(
-			'Unable to export mediaItem(%s) to "%s".',
-			identifier, tempDir
-		)
-		cleanup(tempDir)
-		return serveError(404)
-	end
-
-	-- get first file in temporary directory (there should only be one)
-	local filepath = aFileIn(tempDir)
-	if not filepath then
-		info(
-			'No file found in tempdir: %s',
-			PS.tempDir
-		)
-		cleanup(tempDir)
-		return serveError(500)
-	end
-	---@cast filepath string
-
-
-	-- read file and generate header data
-
-	return serveFile(filepath, identifier .. filepath:match'%..*$',
-		tempDir)
 end
 
----@class HttpServer
----@field setName fun(self, name: string)
----@field setInterface fun(self, interface: string)
----@field setPort fun(self, port: number)
----@field setCallback fun(self, callback: function)
----@field start fun(self)
----@field stop fun(self)
 function PS:init()
 	---@type HttpServer?
 	PS.Server = hs.httpserver.new(false, true)
@@ -209,7 +186,7 @@ function PS:init()
 	PS.Server:setName(PS.name)
 	PS.Server:setInterface(PS.host)
 	PS.Server:setPort(PS.port)
-	PS.Server:setCallback(httpResponse)
+	PS.Server:setCallback(httpHandler)
 	PS.httpErrors = {
 		[500] = {
 			filename = 'error.svg',
@@ -239,3 +216,15 @@ function PS:start() return PS.Server and PS.Server:start() end
 function PS:stop() return PS.Server and PS.Server:stop() end
 
 return PS
+
+
+---@class hs.http
+---@field urlParts fun(path: string): table
+
+---@class HttpServer
+---@field setName fun(self, name: string)
+---@field setInterface fun(self, interface: string)
+---@field setPort fun(self, port: number)
+---@field setCallback fun(self, callback: function)
+---@field start fun(self)
+---@field stop fun(self)
