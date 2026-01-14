@@ -19,14 +19,15 @@ PS.port = 6330
 PS.timeout = 11 -- seconds to wait for Photos App to respond befroe aborting
 
 
-local tempDir -- unnamed until it is created
-local function makeTempDir()
-	tempDir = string.format('%shammerspoon-photos-server-%s',
+---@return string?, string?
+local function makeTempDir(basename)
+	local dirname = string.format('%s%s%s',
 		hs.fs.temporaryDirectory(),
+		basename,
 		hs.host.globallyUniqueString())
-	local success, errorMsg = hs.fs.mkdir(tempDir)
-	if not success then tempDir = nil end
-	return tempDir
+	local ok, err = hs.fs.mkdir(dirname)
+	if ok then return dirname end
+	return nil, err
 end
 
 local function loadResource(resource)
@@ -52,8 +53,10 @@ local function fileResponse(path, filename)
 	filename = filename or path:find'[^/]+$'
 	local photoBytes, err = io.open(path, 'rb'):read'*a'
 	if not photoBytes then return nil, err end
+
 	local size = tostring(#photoBytes)
 	if not photoBytes then return nil, err end
+
 	local mime = hs.fs.fileUTIalternate(hs.fs.fileUTI(path),
 		'mime')
 	if not mime then return nil, err end
@@ -74,12 +77,13 @@ local function httpResponse(method, path, requestHeaders, requestBody)
 		method, path, hs.inspect(requestHeaders), requestBody
 	)
 	local body, code, headers
-
 	if method ~= 'GET' then return '', 405, {} end
+
 	---@class hs.http
 	---@field urlParts fun(path: string): table
+
 	-- the first path component is the leading /
-	local identifier = hs.http.urlParts(path).pathComponents[2]
+	local identifier = hs.http.urlParts(path).pathComponents[2] or ''
 
 	-- serve static file if one is specified
 	if PS.static[identifier] then
@@ -93,8 +97,9 @@ local function httpResponse(method, path, requestHeaders, requestBody)
 		return body, code, headers
 	end
 
+	local tempDir = makeTempDir'hammerspoon-photos-server-'
 	-- make temporary directory for this request
-	if not makeTempDir() then return httpError(500) end
+	if not tempDir then return httpError(500) end
 
 	info('-- exporting media item "%s" to "%s"', identifier, tempDir)
 
