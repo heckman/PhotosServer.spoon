@@ -47,10 +47,6 @@ local function httpError(code, message)
 	}
 end
 
-local function shQuote(x)
-	return '\'' .. string.gsub(x, '\'', "\'\\'\'") .. '\''
-end
-
 
 local function fileResponse(path, filename)
 	filename = filename or path:find'[^/]+$'
@@ -82,8 +78,8 @@ local function httpResponse(method, path, requestHeaders, requestBody)
 	if method ~= 'GET' then return '', 405, {} end
 	---@class hs.http
 	---@field urlParts fun(path: string): table
-	local _ = hs.http.urlParts(path).pathComponents
-	local identifier, action = _[2] or '', _[3] or ''
+	-- the first path component is the leading /
+	local identifier = hs.http.urlParts(path).pathComponents[2]
 
 	-- serve static file if one is specified
 	if PS.static[identifier] then
@@ -100,17 +96,18 @@ local function httpResponse(method, path, requestHeaders, requestBody)
 	-- make temporary directory for this request
 	if not makeTempDir() then return httpError(500) end
 
-	-- call cli to export photo from Photos App
-	local options = '--timeout ' .. PS.timeout
-	if (action == 'open') then options = options .. ' --open' end
-	local cli = string.format('%s export %s %s %s 2>&1',
-		PS.photoCli, options, shQuote(identifier), tempDir
-	)
-	info('-- photos-cli command:\n%s', cli)
-	local photoId, ok = hs.execute(cli)
-	info('-- media item found: %s', photoId)
-	if not ok then return httpError(500) end
-	---@cast photoId string
+	info('-- exporting media item "%s" to "%s"', identifier, tempDir)
+
+	local ok, result, err = hs.osascript.javascript(string.format([[
+Application("Photos").export(
+	[Application("Photos").mediaItems.byId("%s")],
+	{ to:Path("%s"), usingOriginals:%s }
+);]], identifier, tempDir, 'false'))
+
+	if not ok then
+		return httpError(404,
+			'Media item not found.')
+	end
 
 	-- get first file in temporary directory (there should only be one)
 	local filename
@@ -129,11 +126,13 @@ local function httpResponse(method, path, requestHeaders, requestBody)
 			'No file found in tempdir: ' .. tempDir)
 	end
 
+	-- trim whitespace and remove longest suffix starting with /
+
 	-- read file and generate header data
 	local filepath = tempDir .. '/' .. filename
 	body, code, headers = fileResponse(
 		filepath,
-		photoId:gsub('%s*$', '') .. filename:match'%..*$'
+		identifier .. filename:match'%..*$'
 	)
 	if not body then
 		return httpError(500,
@@ -196,13 +195,12 @@ function PS:init()
 			errorBody = loadResource'error404.svg',
 		},
 	}
-	PS.photoCli = hs.spoons.resourcePath'photos-cli'
 	-- static images to serve
 	PS.static = {
 		['favicon.ico'] = hs.spoons.resourcePath'favicon.ico',
 		['apple-touch-icon.png'] = hs.spoons.resourcePath'apple-touch-icon.png',
 	}
-	-- image to serve when there is no path specified
+	PS.static['favicon.png'] = PS.static['apple-touch-icon.png']
 	PS.static[''] = PS.static['apple-touch-icon.png']
 end
 
