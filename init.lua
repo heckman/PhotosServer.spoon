@@ -162,9 +162,9 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 	-- if no media item is found this will be a 404 response
 	local ok, code, headers, content = xpcall(
 		loadMediaItem, info,
-		---@class hs.http
-		---@field urlParts fun(path: string): table
-		hs.http.urlParts(path).pathComponents[2] or '', tempDir
+		-- the Photos App ignores anything that comes after a valid uuid
+		-- so we only need to strip of the leading /
+		path:sub(2), tempDir
 	)
 
 	-- remove the temporary directory and the file within
