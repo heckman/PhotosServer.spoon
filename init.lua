@@ -23,8 +23,11 @@ local function info(...)
 	hs.printf(...)
 end
 
+local function resourcePath(resource)
+	return hs.spoons.resourcePath('resources/' .. resource)
+end
 local function loadResource(resource)
-	return io.open(hs.spoons.resourcePath(resource), 'r'):read'*a'
+	return io.open(resourcePath(resource), 'r'):read'*a'
 end
 
 local function aFileIn(dir)
@@ -79,8 +82,15 @@ local function serveContent(code, content, filename, mimetype)
 	return content, code, headers
 end
 
+---@param code integer
+---@param tempDir string
+---@param messageFormat string
+---@vararg any
 ---@return string, integer, table
-local function serveError(code)
+local function serveError(code, tempDir, messageFormat, ...)
+	messageFormat = messageFormat or 'Unknown error.'
+	info('-- ERROR: ' .. messageFormat, ...)
+	cleanup(tempDir)
 	local e = PS.httpErrors[code] or PS.httpErrors[500]
 	if not e.content then return '', code, e.headers end
 	return serveContent(code, e.content, e.filename, e.mimetype)
@@ -117,10 +127,14 @@ Application("Photos").export(
 	)
 end
 
-
+---@return string, integer, table
 local function httpResponse(method, path, requestHeaders, requestBody)
-	if method ~= 'GET' then return '', 405, {} end
+	info(
+		'\n-- http request:\t%s\t%s\n%s\n\n%s',
+		method, path, hs.inspect(requestHeaders), requestBody
+	)
 
+	assert(method == 'GET', { 405, nil, 'Unsupported HTTP method.' })
 
 	-- the first path component is the leading /
 	local identifier = hs.http.urlParts(path).pathComponents[2] or ''
@@ -140,23 +154,21 @@ local function httpResponse(method, path, requestHeaders, requestBody)
 		exportMediaItem(identifier, tempDir),
 		{ 404, tempDir, 'Media item "%s" not found.', identifier }
 	)
-
 	local filepath = assert(
 		aFileIn(tempDir),
 		{ 500, tempDir, 'No file found in tempdir: %s', tempDir }
 	)
+	info('-- media item exported to "%s"', filepath)
+
+	local filename = identifier .. filepath:match'%..*$'
+	info('-- serving media item as "%s".', filename)
 
 	return serveFile(
-		filepath, identifier .. filepath:match'%..*$', tempDir
+		filepath, filename, tempDir
 	)
 end
 
----@param err [ integer, string, string, ... ]
-local function errorHandler(err)
-	info(table.unpack(err, 3)) -- error message to format
-	cleanup(err[2])     -- tempDir
-	return err[1]       -- http error code
-end
+
 
 ---@param method 'GET'|'HEAD'|'POST'|'PUT'|'DELETE'|'CONNECT'|'OPTIONS'|'TRACE'|'PATCH'
 ---@param path string
@@ -164,18 +176,16 @@ end
 ---@param requestBody string
 ---@return string, integer, table
 local function httpHandler(method, path, requestHeaders, requestBody)
-	info('\n-- http request:\t%s\t%s\n%s\n\n%s',
-		method, path, hs.inspect(requestHeaders), requestBody
-	)
 	local ok, content, response_code, response_headers =
-	    xpcall(
-		    httpResponse, errorHandler,
+	    pcall(
+		    httpResponse,
 		    method, path, requestHeaders, requestBody
 	    )
 	if ok then
 		return content, response_code, response_headers
 	else
-		return serveError(content)
+		---@diagnostic disable-next-line: param-type-mismatch
+		return serveError(table.unpack(content))
 	end
 end
 
@@ -187,6 +197,9 @@ function PS:init()
 	PS.Server:setInterface(PS.host)
 	PS.Server:setPort(PS.port)
 	PS.Server:setCallback(httpHandler)
+
+	-- preloaad error responses, so we don't have to worry about
+	-- encountering an error when we're trying to serve an error
 	PS.httpErrors = {
 		[500] = {
 			filename = 'error.svg',
@@ -204,8 +217,8 @@ function PS:init()
 	}
 	-- static images to serve
 	PS.static = {
-		['favicon.ico'] = hs.spoons.resourcePath'favicon.ico',
-		['apple-touch-icon.png'] = hs.spoons.resourcePath'apple-touch-icon.png',
+		['favicon.ico'] = resourcePath'favicon.ico',
+		['apple-touch-icon.png'] = resourcePath'apple-touch-icon.png',
 	}
 	PS.static['favicon.png'] = PS.static['apple-touch-icon.png']
 	PS.static[''] = PS.static['apple-touch-icon.png']
