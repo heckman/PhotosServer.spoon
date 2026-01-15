@@ -30,17 +30,18 @@ Like tomorrow soon. By the end of the week at the latest.
 
 ### Manual Installation
 
-In your Spoons directory, create a directory named `PhotosServer`.
-Download the two `.lua` files and the `resources` directory and
-put them in there.
+Download the two `.lua` files and the `resources` directory
+and put them a directory named `PhotosServer`
+within your Spoons directory.
 
-There is also a [command-line utitlity](#bonus) included in the `cli` directory that
-might be useful.
+There is also a [command-line utitlity](#bonus) included
+in the `cli` directory that might be useful.
 
 ### Automatic Installation
 
-This has not yet been implemented. When I figure out how, I'll have
-github generate a zip file with the packaged Spoon.
+This has not yet been implemented.
+When I figure out how,
+I'll have github generate a zip file with the packaged Spoon.
 
 <!--
 Download
@@ -119,13 +120,13 @@ When the server is running, the address
 `http://localhost:6330/<UUID>`
 will provide the media item from the Photos library with that particular UUID.
 
-I use a osascript which I have not included with this spoon
+I use a osascript which I have not included with this Spoon
 that is triggered by a key combination
 which generates markdown links
 for the currently selected media items in the Photo application.
 
 A similar setup can be achieved by incorporating
-the photosSelection function offered by this spoon
+the photosSelection function offered by this Spoon
 into you Hammerspoon configuration.
 Once I figure out how that is done,
 I will include and example
@@ -182,7 +183,7 @@ Two lines need to be added.
 After all existing lines starting with `rdr-anchor` add one for our new rule.
 Likewise, after all exiting `load anchor` lines we need to add one for our new rule.
 
-After these additions, the uncommented lines of my `/etc/pf.conf` file looks like this:
+After these additions, the uncommented portion of my `/etc/pf.conf` file looks like this:
 
 ```shell
 scrub-anchor "com.apple/*"
