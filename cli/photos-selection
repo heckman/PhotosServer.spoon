@@ -1,0 +1,64 @@
+#!/bin/sh
+# Copyright 2026 Erik Ben Heckman <erik@heckman.ca>
+# spdx-license-identifier: MIT
+#
+#   photos-selection -- version 0.0.1
+#
+# prints a json array of the media items
+# currently selected in the Photos Application.
+#
+# requires Hammerspoon <https://www.hammerspoon.org>
+# and the PhotosServer Spoon
+#   <https://github.com/heckman/PhotosServer.spoon>
+#
+
+test "$1" = "-h" || test "$1" = "--help" && {
+	echo "
+Usage: photos-selection [-v] [properties...]
+
+       Prints a json array to stdout of the media items
+       currently selected in the Photos Application.
+
+       Only the properties specified in the command line will
+       be included, unless none are specified, in which case
+       all properties will be included.
+
+       Valid properties:
+         keywords  name  description  favorite  date  id
+         height  width  filename  altitude  size  location
+
+       The -v option will cause errors to be verbose, which
+       may or not be valid json. Normally the error message
+       assumes an invalid property was specified, which may
+       or not be true, and will absolutely not be valid json.
+       In any case, errors are printed to stderr.
+
+"
+	exit 0
+}
+
+verbose=0; test "$1" = "-v" && { verbose=1; shift; }
+
+hs -q -c "
+(
+	function(...)
+		selection, err = hs.loadSpoon'PhotosServer'.photosSelection(...)
+		return selection and hs.json.encode(selection,true)
+			or hs.json.encode(err,true)
+			or hs.inspect(err)
+end)($(test $# -ne 0 && printf "'%s'," "$@" | sed 's/,$//'))
+" |
+awk -v v="$verbose" ' # the first line of output will start with a [
+NR==1 && /^[^[]/ {
+	if (v) { e=1 } else {
+		print "Invalid property." | "cat 1>&2"
+		exit 1
+	}
+}
+{
+	if (e) { print | "cat 1>&2" } else { print }
+}
+END {
+	if (e) { exit 1 }
+}
+'
