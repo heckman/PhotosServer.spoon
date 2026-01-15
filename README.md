@@ -6,7 +6,6 @@ that serves the contents of the
 [Apple Photos](https://apps.apple.com/app/photos/id1584215428)
 library on localhost via HTTP.
 
-
 ## Use case
 
 I write markdown notes on my MacBook
@@ -18,9 +17,7 @@ I'm set up now where if I'm using the Photos app
 and I a key-combination will copy markdown
 that will show that image. It looks like this:
 
-<video>
-  <source src="https://github.com/heckman/PhotosServer.spoon/raw/refs/heads/main/demo.mp4" type="video/mp4" />
-</video>
+<video src="https://github.com/heckman/PhotosServer.spoon/raw/refs/heads/main/demo.mp4" type="video/mp4"></video>
 
 The link for that image is http://photos.local/31F5FDDB-26D6-4EF6-A9E7-4A636F6E6EE2,
 which resolves to this server, which fetches the image from Apple Photos.
@@ -28,7 +25,6 @@ which resolves to this server, which fetches the image from Apple Photos.
 The hotkey to copy the markdown link is not currently implemented here.
 It's something I wrote earlier. I will incorporate it into this project soon.
 Like tomorrow soon. By the end of the week at the latest.
-
 
 ## Installation
 
@@ -39,7 +35,6 @@ If you have Hammerspooon installed,
 it will look like a Spoon file
 that you can double click to install.
 Otherwise it will look like a folder.
-
 
 ## Configuration
 
@@ -64,7 +59,6 @@ without changing the host address or bonjour name:
 hs.loadspoon("PhotosServer"):start{port=8080}
 ```
 
-
 ### API
 
 - **start(** [ *config-table* ] **)** starts the server. Only the keys specified
@@ -76,7 +70,6 @@ hs.loadspoon("PhotosServer"):start{port=8080}
 
 - **stop(** **)** stops the server.
 
-
 ## Usage
 
 When the server is running, the address `http://localhost:6330/<UUID>`
@@ -87,7 +80,6 @@ currently selected in the Photos application. I will incorporate it
 into this project very soon.
 
 ---
-
 
 ## Advanced Setup
 
@@ -175,10 +167,9 @@ For this reason, I recommend a `local` suffix, for which `http` is acceptable.
 There may be a way to use the Bonjour service to avoid having to do this step.
 Please let me know if you know how to do it.
 
-
 ## License
 
-The  project is shared under the MIT License
+The project is shared under the MIT License
 except for the two SVG icons whose copyrights are not held by me:
 
 - The 'broken image' icon was created for Netscape Navigator
@@ -190,4 +181,3 @@ except for the two SVG icons whose copyrights are not held by me:
 - The 'sad mac' icon was created for Apple Inc.
   by Susan Kare (<https://kareprints.com>).
   I hand-crafted the SVG.
-
