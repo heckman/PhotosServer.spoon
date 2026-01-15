@@ -6,12 +6,13 @@ that serves the contents of the
 [Apple Photos](https://apps.apple.com/app/photos/id1584215428)
 library on localhost via HTTP.
 
+
 ## Use case
 
-I write markdown notes on my laptop,
+I write markdown notes on my MacBook
 and I want to include photos from my Photos Library.
-I don't, however, want to make copies of them
-and include them in the git repository my notes are in.
+I don't, however, want to make copies of the images
+to be incldued in the git repository where I keep my notes.
 
 I'm set up now where if I'm using the Photos app
 and I a key-combination will copy markdown
@@ -21,13 +22,13 @@ that will show that image. It looks like this:
   <source src="https://github.com/heckman/PhotosServer.spoon/raw/refs/heads/main/demo.mp4" type="video/mp4" />
 </video>
 
-
 The link for that image is http://photos.local/31F5FDDB-26D6-4EF6-A9E7-4A636F6E6EE2,
 which resolves to this server, which fetches the image from Apple Photos.
 
 The hotkey to copy the markdown link is not currently implemented here.
 It's something I wrote earlier. I will incorporate it into this project soon.
 Like tomorrow soon. By the end of the week at the latest.
+
 
 ## Installation
 
@@ -39,6 +40,7 @@ it will look like a Spoon file
 that you can double click to install.
 Otherwise it will look like a folder.
 
+
 ## Configuration
 
 This assumes you are somewhat familiar with Hammerspoon.
@@ -49,12 +51,12 @@ The simplest way to use this Spoon is to put this in your `lua.init` file:
 hs.loadspoon("PhotosServer"):start()
 ```
 
-This will serve on *127.0.0.1* on port *6330*,
-broadcasting over bonjour as *Photos*
-(It might actually appear as *Photos.local*,
+This will serve on _127.0.0.1_ on port _6330_,
+broadcasting over bonjour as _Photos_
+(It might actually appear as _Photos.local_,
 I haven't figured out to make use of bonjour yet.)
 
-The start method will also take a configuration table. 
+The start method will also take a configuration table.
 This will cause the server to listen on port 8080
 without changing the host address or bonjour name:
 
@@ -62,16 +64,18 @@ without changing the host address or bonjour name:
 hs.loadspoon("PhotosServer"):start{port=8080}
 ```
 
+
 ### API
 
-- **start(** [ *config-table* ] **)**  starts the server. Only the keys specified
-  in the provided *config-table* are changed. The defaults are:
+- **start(** [ *config-table* ] **)** starts the server. Only the keys specified
+  in the provided _config-table_ are changed. The defaults are:
 
   ```lua
   { name='Photos', host='127.0.0.1', port=6330 }
   ```
 
 - **stop(** **)** stops the server.
+
 
 ## Usage
 
@@ -84,12 +88,12 @@ into this project very soon.
 
 ---
 
+
 ## Advanced Setup
 
 I have this set up on my laptop accessible at
 http://photos.local as well as http://localhost:6330.
 I just like how it looks with the custom host name.
-
 
 > **WARNING**: This is not for the faint of heart.
 > Doing this wrong could be VERY VERY VERY bad.
@@ -170,3 +174,20 @@ For this reason, I recommend a `local` suffix, for which `http` is acceptable.
 
 There may be a way to use the Bonjour service to avoid having to do this step.
 Please let me know if you know how to do it.
+
+
+## License
+
+The  project is shared under the MIT License
+except for the two SVG icons whose copyrights are not held by me:
+
+- The 'broken image' icon was created for Netscape Navigator
+  by Marsh Chamberlin (<https://dataglyph.com>).
+  The icon's [SVG code](https://gist.github.com/diachedelic/cbb7fdd2271afa52435b7d4185e6a4ad)
+  was hand-coded by github user [diachedelic](https://gist.github.com/diachedelic).
+  I added the white background.
+
+- The 'sad mac' icon was created for Apple Inc.
+  by Susan Kare (<https://kareprints.com>).
+  I hand-crafted the SVG.
+
