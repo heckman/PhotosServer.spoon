@@ -105,7 +105,7 @@ I'm using **127.0.0.3**.
 
 #### Create the packet filter rule
 
-First create the rule. Put it in a new file in the `/etx/pf.anchors` directory.
+First create the rule. Put it in a new file in the `/etc/pf.anchors` directory.
 Mine is in a file called `/etc/pf.anchors/ca.heckman.photos-server.redirect`.
 This file should contain this single line:
 
