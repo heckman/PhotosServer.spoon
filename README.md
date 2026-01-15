@@ -17,7 +17,7 @@ I'm set up now where if I'm using the Photos app
 and I a key-combination will copy markdown
 that will show that image. It looks like this:
 
-<video src="https://github.com/heckman/PhotosServer.spoon/raw/refs/heads/main/demo.mp4" type="video/mp4"></video>
+![](https://github.com/user-attachments/assets/16ac318c-68bb-4076-a2af-77be5abd7f88)
 
 The link for that image is http://photos.local/31F5FDDB-26D6-4EF6-A9E7-4A636F6E6EE2,
 which resolves to this server, which fetches the image from Apple Photos.
