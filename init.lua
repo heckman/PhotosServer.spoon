@@ -312,7 +312,6 @@ end
 PS.photosApplication = dofile(
 	hs.spoons.resourcePath'photosApplication.lua'
 )
-PS.getSelection = PS.photosApplication.getSelection
-PS.bindHotKeys = PS.photosApplication.bindHotKeys
+PS.photosSelection = PS.photosApplication.selection
 
 return PS

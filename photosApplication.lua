@@ -21,7 +21,7 @@ local Photos = {}
 ---@vararg MediaItemKey? a list of properties to retrieve, nil for all
 ---@return {}|[MediaItem]? selection empty table if no selection, nil on error
 ---@return string|table error raw data string or error table returned by osascript
-function Photos.getSelection(...)
+function Photos.selection(...)
 	local _, array, err = hs.osascript.javascript(
 		[[
 const getProp=(item,propName)=>{
