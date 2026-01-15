@@ -1,17 +1,43 @@
 --- === PhotosServer ===
 ---
---- Access Photos Library via http.
+--- Serves the Apple Photos Library locally via HTTP
 ---
 ---
+---@class PhotosServer
+---@field config PhotosServer.config The HTTP server configuration
+---@field init fun(): PhotosServer Called automatically by hs.loadSpoon('PhotosServer')
+---@field start fun(config?: PhotosServer.config): PhotosServer Start the HTTP server
+---@field stop fun(): PhotosServer Stop the HTTP server
 
 local PS = {
 	name = 'Photos Server',
 	version = '0.1.0',
 	author = 'Erik Ben Heckman <erik@heckman.ca>',
-	description = 'Http interface to the Apple Photos Library.',
+	description = 'Serves the Apple Photos Library locally via HTTP.',
 	homepage = 'https://github.com/Heckman/PhotosServer.spoon',
 	license = 'MIT - https://opensource.org/licenses/MIT',
 }
+
+---@class PhotosServer.config
+---@field name string the bonjour name of the server. Default: `Photos`
+---@field host string the host to serve the HTTP server on. Default: `localhost`
+---@field port integer the port to serve the HTTP server on. Default: `6330`
+
+---@type PhotosServer.config
+PS.config = {
+	name = 'Photos Server',
+	host = 'localhost',
+	port = 6330,
+}
+
+
+--   Method definitions are at the end of the file,
+--   so that they can call the local functions.
+
+---
+---
+--=  Local functions
+---
 
 local function info(message)
 	print(message)
@@ -42,11 +68,13 @@ local function cleanup(dir)
 	)
 end
 
--- Create a directory within the user's temporary directory with
--- the provided basename appended with a very long random string.
+-- Create a temporary directory
+--
+-- The directory is created within the user's temporary directory with
+-- the provided base name appended with a very long random string.
 --
 ---@param basename string
----@return string | nil  directory-name or nil if unsuccesssful
+---@return string | nil directory the parh of the new directory, if successful
 local function makeTempDir(basename)
 	local dirname = string.format('%s%s%s',
 		hs.fs.temporaryDirectory(),
@@ -56,12 +84,12 @@ local function makeTempDir(basename)
 	return ok and dirname or nil
 end
 
--- Read a file and return its contents and appropriate response headers
+-- Return the response headers and contents of a file to serve
 --
 ---@param filepath string the absolute path to the file.
 ---@param filename? string serve the file with this filename in its content-disposition field; defaults to the last part of the path.
 ---@return table headers, string body the response headers and file contents.
----@fallible
+---@fallible when the file can't be read or its mimetype can't be determined
 local function readFile(filepath, filename)
 	---@cast filename string
 	filename = filename or filepath:find'[^/]+$'
@@ -83,7 +111,7 @@ local function readFile(filepath, filename)
 	}, file_contents
 end
 
--- Export a media item from the Photos App to the specified directory.
+-- Export a media item from the Photos App
 --
 ---@param identifier string the uuid of the media item
 ---@param destination string the directory to export the file to
@@ -106,9 +134,13 @@ Application("Photos").export(
 	)
 end
 
--- Load the specified media item and return its contents
--- along with the appropriate response headers.
+-- Return the headers and contents of a media item to be served
 --
+-- The item needs to be exported to a temporary directory,
+-- then loaded by the server to included in an HTTP response.
+--
+---@param uuid string the uuid of the media item
+---@param destination string the temporary directory to use
 ---@return integer code, table headers, string content
 local function loadMediaItem(uuid, destination)
 	if exportMediaItem(uuid, destination) then
@@ -125,7 +157,9 @@ local function loadMediaItem(uuid, destination)
 	end
 end
 
--- Handle http requests
+-- Handle an http request
+--
+-- See: https://www.hammerspoon.org/docs/hs.httpserver.html
 --
 ---@param method 'GET'|'HEAD'|'POST'|'PUT'|'DELETE'|'CONNECT'|'OPTIONS'|'TRACE'|'PATCH'
 ---@param path string
@@ -175,33 +209,19 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 	return PS.serverError()
 end
 
----@alias PhotosServer.config { name: string, host: string, port: integer }
----@class PhotosServer
----@field config PhotosServer.config
----@field init fun(): PhotosServer
----@field start fun(config?: PhotosServer.config): PhotosServer
----@field stop fun(): PhotosServer
+---
+---
+---  PhotoServer Methods
+---
 
---- PhotosServer:config(config)
---- Variable
---- The HTTP server configuration table
----
---- Fields:
----  * name - The bonjour name of the server. Default: `Photos`
----  * host - The host to serve the HTTP server on. Default: `localhost`
----  * port - The port to serve the HTTP server on. Default: `6330`
----
---- Returns:
----  * The PhotosServer spoon
----
-PS.config = {
-	name = 'Photos Server',
-	host = 'localhost',
-	port = 6330,
-}
+-- Initialize the PhotosServer Spoon
+--
+-- This is called automatically when PhotosServer is loaded by Hammerspoon.
+--
+---@return PhotosServer
 function PS:init()
-	PS.Server = assert(hs.httpserver.new(false, true))
-	PS.Server:setCallback(httpHandler)
+	PS.server = assert(hs.httpserver.new(false, true))
+	PS.server:setCallback(httpHandler)
 	local resourcePath = function (resource)
 		return assert(
 			hs.spoons.resourcePath('resources/' .. resource),
@@ -237,44 +257,52 @@ function PS:init()
 	return self
 end
 
---- PhotosServer:start([config])
---- Method
---- Starts the HTTP server.
----
---- Parameters:
----  * config - optional [configuration table](#config). If thie is set, then
----             PhotosServer:config will be set before starting the server.
----
---- Returns:
----  * The PhotosServer spoon.
----
+-- Start the HTTP server
+--
+-- If a config object is provided, settings will be changed before starting.
+-- Each valid setting within will be saved in the PhotosServer configuration.
+-- Settings absent from the provided config object will remain unchanged.
+--
+-- For example, PhotosServer.start{ host = '127.0.0.3' } will permanently
+-- alter the host setting and will leave the name and port settings intact.
+--
+---@param config? PhotosServer.config
+---@return PhotosServer
 function PS:start(config)
-	self:config(config)
-	PS.Server:setName(self.config.name)
-	PS.Server:setInterface(self.config.host)
-	PS.Server:setPort(self.config.port)
-	PS.Server:start()
+	self:configure(config)
+	self.server:setName(self.config.name)
+	self.server:setInterface(self.config.host)
+	self.server:setPort(self.config.port)
+	info('starting server on ' ..
+		self.config.host .. ':' .. self.config.port)
+	self.server:start()
 	return self
 end
 
---- PhotosServer:stop()
---- Method
---- Stops the HTTP server.
----
---- Returns:
----  * The PhotosServer spoon.
----
+-- Stop the HTTP server
+--
+-- Settings in PhotosServer.config will be maintained after stopping.
+--
+---@return PhotosServer
 function PS:stop()
-	PS.Server:stop()
+	info'stopping server'
+	self.server:stop()
 	return self
 end
 
----@param config? { name: string, host: string, port: integer }
-function PS:config(config)
+-- If a config object is provided, each valid setting will be saved in the
+-- PhotosServer configuration. Settings absent from the provided config object
+-- will remain unchanged.
+--
+-- For example, PhotosServer.configure{ host = '127.0.0.3' }
+-- will leave the name and port settings intact.
+--
+---@param config? PhotosServer.config
+function PS:configure(config)
 	if config then
-		if config.name then self.name = config.name end
-		if config.host then self.host = config.host end
-		if config.port then self.port = config.port end
+		if config.name then self.config.name = config.name end
+		if config.host then self.config.host = config.host end
+		if config.port then self.config.port = config.port end
 	end
 	return self
 end
