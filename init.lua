@@ -307,4 +307,12 @@ function PS:configure(config)
 	return self
 end
 
+-- The keybindings should belong in another spoon, but
+-- they are included here in case they're not availabe elsewhere
+PS.photosApplication = dofile(
+	hs.spoons.resourcePath'photosApplication.lua'
+)
+PS.getSelection = PS.photosApplication.getSelection
+PS.bindHotKeys = PS.photosApplication.bindHotKeys
+
 return PS
