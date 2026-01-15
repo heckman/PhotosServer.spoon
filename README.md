@@ -170,7 +170,9 @@ Please let me know if you know how to do it.
 ## License
 
 The project is shared under the MIT License
-except for the two SVG icons whose copyrights are not held by me:
+except for the contents of the `/resources` directory,
+which contains copies of the Apple Photos icon
+as well as SVG versions of two historic icons:
 
 - The 'broken image' icon was created for Netscape Navigator
   by Marsh Chamberlin (<https://dataglyph.com>).
