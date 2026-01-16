@@ -12,9 +12,9 @@ local PhotosServer = {
 	homepage = 'https://github.com/Heckman/PhotosServer.spoon',
 	license = 'MIT - https://opensource.org/licenses/MIT',
 	-- default config:
-	bonjour = 'Photos', -- advertised by Bonjour as Photos.local
 	host = 'localhost',
 	port = 6330,
+	bonjour = nil, -- advertised by Bonjour by this name
 }
 
 ---@class PhotosServer
