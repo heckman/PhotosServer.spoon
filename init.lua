@@ -255,7 +255,7 @@ end
 --
 ---@return PhotosServer
 function PhotosServer:start()
-	self.server:setName(self.bonjour)
+	if self.bonjour then self.server:setName(self.bonjour) end
 	self.server:setInterface(self.host)
 	self.server:setPort(self.port)
 	info('starting server on ' .. self.host .. ':' .. self.port)
