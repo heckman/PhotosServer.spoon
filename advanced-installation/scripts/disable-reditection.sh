@@ -7,11 +7,11 @@ then
 	exit 1
 fi
 
-sudo launchctl unload -w /Library/LaunchDaemons/ca.heckman.photos-server.plist > /dev/null 2>&1
+sudo launchctl unload -w /Library/LaunchDaemons/ca.heckman.photos-server.redirect.plist > /dev/null 2>&1
 
 if {
-	! test -f /Library/LaunchDaemons/ca.heckman.photos-server.plist ||
-	sudo rm -i /Library/LaunchDaemons/ca.heckman.photos-server.plist
+	! test -f /Library/LaunchDaemons/ca.heckman.photos-server.redirect.plist ||
+	sudo rm -i /Library/LaunchDaemons/ca.heckman.photos-server.redirect.plist
 } && {
 	! test -f /etc/pf.anchors/ca.heckman.photos-server ||
 	sudo rm -i /etc/pf.anchors/ca.heckman.photos-server

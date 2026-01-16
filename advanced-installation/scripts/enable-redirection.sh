@@ -9,10 +9,10 @@ fi
 
 if \
 sudo cp -i ca.heckman.photos-server /etc/pf.anchors/ &&
-sudo cp -i ca.heckman.photos-server.plist /Library/LaunchDaemons/
+sudo cp -i ca.heckman.photos-server.redirect.plist /Library/LaunchDaemons/
 then
-	sudo launchctl unload /Library/LaunchDaemons/ca.heckman.photos-server.plist >/dev/null 2>&1
-	sudo launchctl load -w /Library/LaunchDaemons/ca.heckman.photos-server.plist >/dev/null 2>&1
+	sudo launchctl unload /Library/LaunchDaemons/ca.heckman.photos-server.redirect.plist >/dev/null 2>&1
+	sudo launchctl load -w /Library/LaunchDaemons/ca.heckman.photos-server.redirect.plist >/dev/null 2>&1
 	echo Requests to 127.0.0.3:80 should be redirected to 127.0.0.1:6330
 	exit 0
 else
