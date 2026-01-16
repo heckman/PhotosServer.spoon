@@ -68,78 +68,18 @@ This will listen to port _6330_ on _localhost_.
 
 #### Properties
 
-The PhotosServer properties should not be accessed directly.
-The _configure_ and _start_ take an optional argument that will set the options.
+PhotosServer has three properties that configure the HTTP server:
+
+- **host** _string_ : The address on which to serve; the default is **_127.0.0.1_**.
+- **port** _integer_ : The port to listen to; the default is **_6330_**. Note that the system will prevent you from setting this to a small number.
+- **bonjour** _string?_ : An optional name. The HTTP server will advertise itself with Bonjour using this name. (This is not the hostname of the server.) By default it is unset.
 
 #### Methods
 
 - **PhotosServer:start(** \[ _config-table_ \] **)** starts the HTTP server, If the optional _config-table_ is specified then the configure method will be called with it prior to starting the server.
-
 - **PhotosServer:stop( )** stops the HTTP server.
-
 - **PhotosServer:configure(** _config-table_ **)** if _config-table_ is not nil or empty, each of its keys will set
   and option. Options not included in the table are not affected. The available options are:
-
-  - **name** _string?_ : An optional name. The HTTP server will advertise itself with Bonjour using this name. (This is not the hostname of the server.) By default it is unset.
-  - **host** _string_ : The address on which to serve; the default is **_127.0.0.1_**.
-  - **port** _integer_ : The port to listen to; the default is **_6330_**. Note that the system will prevent you from setting this to a small number.
-  - **origin** _string_ : The origin of the server; the default is **_http://localhost:6330_**.
-    This can be different from the host and port settings. It defines where media items can
-    be accessed and is used when copying links from the media items selected in the Photos application.
-    I have this set to **_http://photos.local_**.}.
-    The [Advanced Setup](#advanced-setup) section explains how this works.
-    When the feature that allows you to copy markdown links moves to its own Spoon,
-    this setting will likely go with it.
-
-#### Functions
-
-These two functions are pointers to function in an internal table called
-`PhotosServer.PhotosApplication`.
-which will likely be split-off into its own Spoon in the near future.
-They are included here in the mean time but will probably disappear,
-as they don't share any code with the rest of the module.
-
-Note that these functions are not methods, and calling them with the `:` notation
-will result in undefined behaviour.
-
-- **PhotosServer.copySelectionAsMarkdown()**: copies markdown links that will
-  resolve to the media items currently selected in the Photos Application.
-
-- **PhotosServer.photosSelection(** \[ _properties..._ \] **)**:
-  returns an array of the media items currently selected in the Photos Application.
-
-  Each media item is represented by a table of its properties.
-  If any _properties_ are specified, only those properties will be included.
-  ( This is more efficient if you want a single property for a large selection.)
-  If no properties are specified, all available properties are included.
-
-  The available properties are:
-
-  - **keywords** _\[ string \]?_ : A list of keywords associated with a media item
-  - **name** _string?_ : The name (title) of the media item.
-  - **description** _string?_ : A description of the media item.
-  - **favorite** _boolean?_ : Whether the media item has been favourited.
-  - **date** _integer?_ : The date of the media item in seconds since the Unix epoch.
-  - **id** _string_ : The unique ID of the media item.
-  - **height** _integer_ : The height of the media item in pixels.
-  - **width** _integer_ : The width of the media item in pixels.
-  - **filename** _string_ : The name of the file on disk.
-  - **altitude** _float?_ : The GPS altitude in meters.
-  - **size** _integer_ : The selected media item file size.
-  - **location** _\[ float?, float? \]_ : The GPS latitude and longitude,
-    in an ordered list of 2 numbers or missing values.
-    Latitude in range -90.0 to 90.0, longitude in range -180.0 to 180.0.
-
-  If any provided properties are invalid, this function will return two values:
-  _nil_ and the error table returned from the Photos application.
-
-#### Key bindings
-
-For now, the PhotosServer Spoon offers a single keybinding:
-
-- **copyMarkdown** : Calls the `copySelectionAsMarkdown()` function.
-  When the corresponding function is moved to a new Spoon,
-  this keybinding will go with it.
 
 ## Usage
 
@@ -147,10 +87,7 @@ When the server is running, the address
 `http://localhost:6330/<UUID>`
 will provide the media item from the Photos library with that particular UUID.
 
-This module currentl provides a keybinding to copy markdown links
-of the media items currently selected in the Photos application.
-This feature will soon be removed from this Spoon,
-and moved to a new Spoon likely called `Photos`.
+I have written a sister spoon [Photos.spoon](http://github.com/heckman/photos.spoon) which provides hotkey bindings to copy markdown links that resolve to the media items currently selected in the Photos application.
 
 ## Bonus
 
@@ -190,68 +127,55 @@ There are two steps.
 
 1. Redirect 127.0.0.3:80 to 127.0.0.1:6330
 
-Copy the file `ca.heckman.photos-server` to `/etc/pf.anchors/`.
-Doing this with `sudo` should make it owned by `root:wheel`,
-which is what we want.
+   - Copy the file `ca.heckman.photos-server` to `/etc/pf.anchors/` using *sudo*.
+   - Copy the file `ca.heckman.photos-server.plist` to `/Library/LaunchDaemons/`, also with *sudo*.
+   - And load the launch daemon:
+     ```shell
+     sudo launchctl load -w /Library/LaunchDaemons/ca.heckman.photos-server.plist
+     ```
+     This should enable the redirect immediately,
+     and it should persist after restarts and system updates.
 
-Copy the file `ca.heckman.photos-server.plist` to `/Library/LaunchDaemons/`.
-Likewise owned by `root:wheel`, which `sudo` should do automatically.
+   > Aside: *I had previously been avoiding using a launch demon*
+   > *by editing the file `/etc/pf.conf` directly,*
+   > *but the settings were lost, either on an update or a reboot.*
 
-Now load the launch daemon with
-`launchctl load -w /Library/LaunchDaemons/ca.heckman.photos-server.plist`,
-which will also require `sudo`.
-
-This should enable the redirect immediately,
-and it should persist after restarts and system updates.
-
-(I previously did this by editing the file `/etc/pf.conf` directly,
-but the settings were lost, either on an update or a reboot.)
-
-To reverse these changes, unload the launch daemon with
-`launchctl -w unload /Library/LaunchDaemons/ca.heckman.photos-server.plist`,
-then delete the two files.
-
+   To reverse these changes, unload the launch daemon (replace `load` with `unload`)
+   
+   and then delete the two files.
+   
 2. Set a pretty host name
 
-To get rid of the rest of the numbers,
-edit the file at `/etc/hosts`,
-adding a line like this:
+   To get rid of the rest of the numbers,
+   edit the file at `/etc/hosts`,
+   adding a line like this:
+   ```plain-text
+   127.0.0.3       photos.local
+   ```
 
-```plain-text
-127.0.0.3       photos.local
-```
+   Now a request for **photos.local**
+   will re resolved to **127.0.0.3:80**
+   which will be redirected to **127.0.0.1:6330**.
 
-Now a request for **photos.local**
-will re resolved to **127.0.0.3:80**
-which will be redirected to **127.0.0.1:6330**.
+   > Aside: _I previously tried using plain `photos`
+   > as the host name but my browser kept appending `.com` to it.
+   > I also tried `photos.app` but my clients
+   > (Safari and Typora)
+   > didn't feel safe accessing it without `https:`.
+   > For this reason, I recommend a `local` suffix,
+   > for which `http` is acceptable._
+   >
+   > _I also tried to use the Bonjour service
+   > to avoid having to do this step,
+   > but the Bonjour name is not the same thing
+   > as the hostname_
 
-I previously tried using plain `photos`
-as the host name but my browser kept appending `.com` to it.
-I also tried `photos.app` but my clients
-(Safari and Typora)
-didn't feel safe accessing it without `https:`.
-For this reason, I recommend a `local` suffix,
-for which `http` is acceptable.
-
-There may be a way to use the Bonjour service
-to avoid having to do this step.
-Please let me know if you know how to do it.
-
-> I've included scripts
-> in the advanced-installation/scripts directory,
-> but using them is dangerous.
-> They are are posix-shell compatible,
-> so they can be sourced from most shells.
-> But don't. Danger. Warning.
-
-## Roadmap
-
-This is my first Spoon, and I've only just started
-working with Hammerspoon. My next steps are:
-
-- Change the setup to follow Spoon conventions,
-  which I'm still figuring out.
-- Move the functions and keybindings to a new Spoon.
+I've included scripts
+in the advanced-installation/scripts directory,
+but using them is dangerous.
+They are posix-shell compatible,
+so they can be sourced from most shells.
+But don't. Danger. Warning.
 
 ## License
 
