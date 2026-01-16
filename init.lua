@@ -3,56 +3,27 @@
 --- Serves the Apple Photos Library locally via HTTP
 ---
 ---
----@class PhotosServer
----@field config PhotosServer.config The HTTP server configuration
----@field init fun(): PhotosServer Called automatically by hs.loadSpoon('PhotosServer')
----@field start fun(config?: PhotosServer.config): PhotosServer Start the HTTP server
----@field stop fun(): PhotosServer Stop the HTTP server
 
-local PS = {
+local PhotosServer = {
 	name = 'Photos Server',
-	version = '0.1.0',
+	version = '0.2.0',
 	author = 'Erik Ben Heckman <erik@heckman.ca>',
-	description = 'Serves the Apple Photos Library locally via HTTP.',
+	description = 'Serves the Apple Photos library locally via HTTP.',
 	homepage = 'https://github.com/Heckman/PhotosServer.spoon',
 	license = 'MIT - https://opensource.org/licenses/MIT',
-}
-
----@class PhotosServer.config
----@field name string the bonjour name of the server. Default: `Photos`
----@field host string the host to serve the HTTP server on. Default: `localhost`
----@field port integer the port to serve the HTTP server on. Default: `6330`
----@field origin string? the origin of the Photos App. Default: `http://localhost:6330`
----this can be different from the host:port settings--it is where photos should
----be expected to be found. For instance, I use `http://photos.local`.
-
--- dont try and set these directly, instead
--- use the :configure or :start methods to do so
--- this is because the origin field is stored elsewhere.
----@type PhotosServer.config
-PS.config = {
-	name = 'Photos Server',
+	-- default config:
+	bonjour = 'Photos', -- advertised by Bonjour as Photos.local
 	host = 'localhost',
 	port = 6330,
 }
 
----
----
----  Public function (AKA static methods)
----
----  These are all defined in the photosApplication table,
----  which will soon be moved to its own spoon
-PS.photosApplication = dofile(
-	hs.spoons.resourcePath'photosApplication.lua'
-)
-PS.photosApplication.origin = 'http://localhost:6330'
-PS.photosSelection = PS.photosApplication.selection
-PS.copySelectionAsMarkdown = PS.photosApplication
-    .copySelectionAsMarkdown
-
-
---   Method definitions are at the end of the file,
---   so that they can call the local functions.
+---@class PhotosServer
+---@field init fun(): PhotosServer Called automatically by hs.loadSpoon('PhotosServer')
+---@field start fun(): PhotosServer Start the HTTP server
+---@field stop fun(): PhotosServer Stop the HTTP server
+---@field bonjour string the bonjour name of the server. Default: `Photos`
+---@field host string the host to serve the HTTP server on. Default: `localhost`
+---@field port integer the port to serve the HTTP server on. Default: `6330`
 
 ---
 ---
@@ -172,7 +143,7 @@ local function loadMediaItem(uuid, destination)
 		return 200, readFile(path, uuid .. path:match'%..*$')
 	else
 		info('-- Media item not found for: ' .. uuid)
-		return 404, readFile(PS.static[404])
+		return 404, readFile(PhotosServer.static[404])
 	end
 end
 
@@ -195,20 +166,21 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 	end
 
 	-- if the path is a static file then serve it
-	if PS.static[path] then
+	if PhotosServer.static[path] then
 		local ok, headers, content = pcall(
-			readFile, PS.static[path], path
+			readFile, PhotosServer.static[path], path
 		)
 		if ok then return content, 200, headers end
-		info('-- Cannot read static file: ' .. PS.static[path])
-		return PS.serverError()
+		info('-- Cannot read static file: ' ..
+			PhotosServer.static[path])
+		return PhotosServer.serverError()
 	end
 
 	-- create a temporary directory to expoer the media item to
 	local tempDir = makeTempDir'hammerspoon-photos-server-'
 	if not tempDir then
 		info'-- Cannot create a temporary directory.'
-		return PS.serverError()
+		return PhotosServer.serverError()
 	end
 
 	-- load the contents of the media item and its appropriate headers
@@ -225,12 +197,13 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 	xpcall(cleanup, info, tempDir)
 
 	if ok then return content, code, headers end
-	return PS.serverError()
+	return PhotosServer.serverError()
 end
+
 
 ---
 ---
----  PhotoServer Methods
+---  PhotosServer Methods
 ---
 
 -- Initialize the PhotosServer Spoon
@@ -238,9 +211,10 @@ end
 -- This is called automatically when PhotosServer is loaded by Hammerspoon.
 --
 ---@return PhotosServer
-function PS:init()
-	PS.server = assert(hs.httpserver.new(false, true))
-	PS.server:setCallback(httpHandler)
+function PhotosServer:init()
+	PhotosServer.server = assert(hs.httpserver.new(false, true))
+	PhotosServer.server:setCallback(httpHandler)
+
 	local resourcePath = function (resource)
 		return assert(
 			hs.spoons.resourcePath('resources/' .. resource),
@@ -260,86 +234,42 @@ function PS:init()
 		['Content-Type'] = 'svg+xml',
 		['Content-Length'] = #error.content,
 	}
-	PS.serverError = function ()
+	PhotosServer.serverError = function ()
 		return error.content, 500, error.header
 	end
 
 	-- don't preload the other static responses
-	PS.static = {
+	PhotosServer.static = {
 		[404] = resourcePath'error404.svg',
 		['/favicon.ico'] = resourcePath'favicon.ico',
 		['/apple-touch-icon.png'] = resourcePath'apple-touch-icon.png',
 	}
-	PS.static['/favicon.png'] = PS.static['apple-touch-icon.png']
-	PS.static['/'] = PS.static['apple-touch-icon.png']
+	PhotosServer.static['/favicon.png'] = PhotosServer.static
+	    ['apple-touch-icon.png']
+	PhotosServer.static['/'] = PhotosServer.static[404]
 
 	return self
 end
 
 -- Start the HTTP server
 --
--- If a config object is provided, settings will be changed before starting.
--- Each valid setting within will be saved in the PhotosServer configuration.
--- Settings absent from the provided config object will remain unchanged.
---
--- For example, PhotosServer.start{ host = '127.0.0.3' } will permanently
--- alter the host setting and will leave the name and port settings intact.
---
----@param config? PhotosServer.config
 ---@return PhotosServer
-function PS:start(config)
-	self:configure(config)
-	self.server:setName(self.config.name)
-	self.server:setInterface(self.config.host)
-	self.server:setPort(self.config.port)
-	info('starting server on ' ..
-		self.config.host .. ':' .. self.config.port)
+function PhotosServer:start()
+	self.server:setName(self.bonjour)
+	self.server:setInterface(self.host)
+	self.server:setPort(self.port)
+	info('starting server on ' .. self.host .. ':' .. self.port)
 	self.server:start()
 	return self
 end
 
 -- Stop the HTTP server
 --
--- Settings in PhotosServer.config will be maintained after stopping.
---
 ---@return PhotosServer
-function PS:stop()
+function PhotosServer:stop()
 	info'stopping server'
 	self.server:stop()
 	return self
 end
 
--- If a config object is provided, each valid setting will be saved in the
--- PhotosServer configuration. Settings absent from the provided config object
--- will remain unchanged.
---
--- For example, PhotosServer.configure{ host = '127.0.0.3' }
--- will leave the name and port settings intact.
---
----@param config? PhotosServer.config
-function PS:configure(config)
-	if config then
-		if config.name then self.config.name = config.name end
-		if config.host then self.config.host = config.host end
-		if config.port then self.config.port = config.port end
-		if config.origin then
-			self.photosApplication.origin = config.origin
-		end
-	end
-	return self
-end
-
--- This method will be removed
--- when photosApplication is moved to its own spoon
----@param mapping table
----@return PhotosServer
-function PS:bindHotkeys(mapping)
-	local spec = {
-		copyMarkdown = PS.photosApplication
-		    .copySelectionAsMarkdown,
-	}
-	hs.spoons.bindHotkeysToSpec(spec, mapping)
-	return self
-end
-
-return PS
+return PhotosServer
