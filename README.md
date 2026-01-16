@@ -68,23 +68,46 @@ This will listen to port _6330_ on _localhost_.
 
 #### Properties
 
-- **PhotosServer.config** is a table of three values:
-  - **name** _string?_ : An optional name. The HTTP server will advertise itself with Bonjour using this name. (This is not the hostname of the server.) By default it is unset.
-  - **host** _string_ : The address on which to serve; the default is **_127.0.0.1_**.
-  - **port** _integer_ : The port to listen to; the default is **_6330_**. Note that the system will prevent you from setting this to a small number.
+The PhotosServer properties should not be accessed directly.
+The _configure_ and _start_ take an optional argument that will set the options.
 
 #### Methods
 
-- **PhotosServer:start(** [ *config-table* ] **)** starts the HTTP server, If the optional _config-table_ is specified then the configure method will be called with it prior to starting the server.
+- **PhotosServer:start(** \[ _config-table_ \] **)** starts the HTTP server, If the optional _config-table_ is specified then the configure method will be called with it prior to starting the server.
 
 - **PhotosServer:stop( )** stops the HTTP server.
 
-- **PhotosServer:configure(** _config-table_ **)** changes values the of _PhotosServer.config_ as specified in the provided _config-table_. Only keys included in _config-table_ are altered in the config settings..
+- **PhotosServer:configure(** _config-table_ **)** if _config-table_ is not nil or empty, each of its keys will set
+  and option. Options not included in the table are not affected. The available options are:
+
+  - **name** _string?_ : An optional name. The HTTP server will advertise itself with Bonjour using this name. (This is not the hostname of the server.) By default it is unset.
+  - **host** _string_ : The address on which to serve; the default is **_127.0.0.1_**.
+  - **port** _integer_ : The port to listen to; the default is **_6330_**. Note that the system will prevent you from setting this to a small number.
+  - **origin** _string_ : The origin of the server; the default is **_http://localhost:6330_**.
+    This can be different from the host and port settings. It defines where media items can
+    be accessed and is used when copying links from the media items selected in the Photos application.
+    I have this set to **_http://photos.local_**.}.
+    The [Advanced Setup](#advanced-setup) section explains how this works.
+    When the feature that allows you to copy markdown links moves to its own Spoon,
+    this setting will likely go with it.
 
 #### Functions
 
-- **PhotosServer.photosSelection(** [ *properties...*] **)**:
-  returns an array-like table of the media items currently selected in the Photos Application.
+These two functions are pointers to function in an internal table called
+`PhotosServer.PhotosApplication`.
+which will likely be split-off into its own Spoon in the near future.
+They are included here in the mean time but will probably disappear,
+as they don't share any code with the rest of the module.
+
+Note that these functions are not methods, and calling them with the `:` notation
+will result in undefined behaviour.
+
+- **PhotosServer.copySelectionAsMarkdown()**: copies markdown links that will
+  resolve to the media items currently selected in the Photos Application.
+
+- **PhotosServer.photosSelection(** \[ _properties..._ \] **)**:
+  returns an array of the media items currently selected in the Photos Application.
+
   Each media item is represented by a table of its properties.
   If any _properties_ are specified, only those properties will be included.
   ( This is more efficient if you want a single property for a large selection.)
@@ -92,7 +115,7 @@ This will listen to port _6330_ on _localhost_.
 
   The available properties are:
 
-  - **keywords** _[ string ]?_ : A list of keywords associated with a media item
+  - **keywords** _\[ string \]?_ : A list of keywords associated with a media item
   - **name** _string?_ : The name (title) of the media item.
   - **description** _string?_ : A description of the media item.
   - **favorite** _boolean?_ : Whether the media item has been favourited.
@@ -103,16 +126,20 @@ This will listen to port _6330_ on _localhost_.
   - **filename** _string_ : The name of the file on disk.
   - **altitude** _float?_ : The GPS altitude in meters.
   - **size** _integer_ : The selected media item file size.
-  - **location** _[ float?, float? ]_ : The GPS latitude and longitude,
+  - **location** _\[ float?, float? \]_ : The GPS latitude and longitude,
     in an ordered list of 2 numbers or missing values.
     Latitude in range -90.0 to 90.0, longitude in range -180.0 to 180.0.
 
   If any provided properties are invalid, this function will return two values:
   _nil_ and the error table returned from the Photos application.
 
-  **Note**:
-  Calling this function as a method (i.e. with `:` notation)
-  will produce an error, as _self_ is not a valid property.
+#### Key bindings
+
+For now, the PhotosServer Spoon offers a single keybinding:
+
+- **copyMarkdown** : Calls the `copySelectionAsMarkdown()` function.
+  When the corresponding function is moved to a new Spoon,
+  this keybinding will go with it.
 
 ## Usage
 
@@ -120,16 +147,10 @@ When the server is running, the address
 `http://localhost:6330/<UUID>`
 will provide the media item from the Photos library with that particular UUID.
 
-I use a osascript which I have not included with this Spoon
-that is triggered by a key combination
-which generates markdown links
-for the currently selected media items in the Photo application.
-
-A similar setup can be achieved by incorporating
-the photosSelection function offered by this Spoon
-into you Hammerspoon configuration.
-Once I figure out how that is done,
-I will include and example
+This module currentl provides a keybinding to copy markdown links
+of the media items currently selected in the Photos application.
+This feature will soon be removed from this Spoon,
+and moved to a new Spoon likely called `Photos`.
 
 ## Bonus
 
@@ -139,12 +160,16 @@ that will print a json array of the media items
 currently selected in the Photos application.
 You could put a symbolic link to it somewhere on your path.
 
+This too will be split off with the functions
+into another spoon in the near future.
+
 ---
 
 ## Advanced Setup
 
-I have this set up on my laptop accessible at <http://photos.local>
-This explains how I did it.
+On my machine, the contents of my Photos library
+is accessible at <http://photos.local>.
+This section explains how I set that up..
 
 > **WARNING**: This is not for the faint of heart.
 > Doing this wrong could be VERY VERY VERY bad.
@@ -161,60 +186,35 @@ As a work-around we can redirect port 80
 from another one of the loopback addresses.
 I'm using **127.0.0.3**.
 
-### Redirect 127.0.0.3:80 to 127.0.0.1:6330
+There are two steps.
 
-#### Create the packet filter rule
+1. Redirect 127.0.0.3:80 to 127.0.0.1:6330
 
-First create the rule.
-Put it in a new file in the `/etc/pf.anchors` directory.
-Mine is in a file called
-`/etc/pf.anchors/ca.heckman.photos-server.redirect`.
-This file should contain this single line:
+Copy the file `ca.heckman.photos-server` to `/etc/pf.anchors/`.
+Doing this with `sudo` should make it owned by `root:wheel`,
+which is what we want.
 
-```conf
-rdr pass on lo0 inet proto tcp from any to 127.0.0.3 port 80 -> 127.0.0.1 port 6330
-```
+Copy the file `ca.heckman.photos-server.plist` to `/Library/LaunchDaemons/`.
+Likewise owned by `root:wheel`, which `sudo` should do automatically.
 
-#### Enable the rule in the packet filter configuration
+Now load the launch daemon with
+`launchctl load -w /Library/LaunchDaemons/ca.heckman.photos-server.plist`,
+which will also require `sudo`.
 
-This requires editing the file `/etc/pf.conf`.
+This should enable the redirect immediately,
+and it should persist after restarts and system updates.
 
-Two lines need to be added.
-After all existing lines starting with `rdr-anchor` add one for our new rule.
-Likewise, after all exiting `load anchor` lines we need to add one for our new rule.
+(I previously did this by editing the file `/etc/pf.conf` directly,
+but the settings were lost, either on an update or a reboot.)
 
-After these additions, the uncommented portion of my `/etc/pf.conf` file looks like this:
+To reverse these changes, unload the launch daemon with
+`launchctl -w unload /Library/LaunchDaemons/ca.heckman.photos-server.plist`,
+then delete the two files.
 
-```shell
-scrub-anchor "com.apple/*"
-nat-anchor "com.apple/*"
-rdr-anchor "com.apple/*"
-rdr-anchor "ca.heckman.photos-server"
-dummynet-anchor "com.apple/*"
-anchor "com.apple/*"
-load anchor "com.apple" from "/etc/pf.anchors/com.apple"
-load anchor "ca.heckman.photos-server" from "/etc/pf.anchors/ca.heckman.photos-server"
-```
-
-#### Flush the rules
-
-The rules will be applied on restart.
-We can can enable them immediately by flushing the rules
-
-```shell
-sudo pfctl -f /etc/pf.conf
-```
-
-This will produce a warning that flushing the rules
-can mess up your system's existing rules.
-This is fine.
-
-Now an HTTP request to **127.0.0.3** will be redirected to **127.0.0.1:6330**
-
-### Set a pretty host name
+2. Set a pretty host name
 
 To get rid of the rest of the numbers,
-we edit the file at `/etc/hosts`,
+edit the file at `/etc/hosts`,
 adding a line like this:
 
 ```plain-text
@@ -236,6 +236,22 @@ for which `http` is acceptable.
 There may be a way to use the Bonjour service
 to avoid having to do this step.
 Please let me know if you know how to do it.
+
+> I've included scripts
+> in the advanced-installation/scripts directory,
+> but using them is dangerous.
+> They are are posix-shell compatible,
+> so they can be sourced from most shells.
+> But don't. Danger. Warning.
+
+## Roadmap
+
+This is my first Spoon, and I've only just started
+working with Hammerspoon. My next steps are:
+
+- Change the setup to follow Spoon conventions,
+  which I'm still figuring out.
+- Move the functions and keybindings to a new Spoon.
 
 ## License
 
