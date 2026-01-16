@@ -22,13 +22,33 @@ local PS = {
 ---@field name string the bonjour name of the server. Default: `Photos`
 ---@field host string the host to serve the HTTP server on. Default: `localhost`
 ---@field port integer the port to serve the HTTP server on. Default: `6330`
+---@field origin string? the origin of the Photos App. Default: `http://localhost:6330`
+---this can be different from the host:port settings--it is where photos should
+---be expected to be found. For instance, I use `http://photos.local`.
 
+-- dont try and set these directly, instead
+-- use the :configure or :start methods to do so
+-- this is because the origin field is stored elsewhere.
 ---@type PhotosServer.config
 PS.config = {
 	name = 'Photos Server',
 	host = 'localhost',
 	port = 6330,
 }
+
+---
+---
+---  Public function (AKA static methods)
+---
+---  These are all defined in the photosApplication table,
+---  which will soon be moved to its own spoon
+PS.photosApplication = dofile(
+	hs.spoons.resourcePath'photosApplication.lua'
+)
+PS.photosApplication.origin = 'http://localhost:6330'
+PS.photosSelection = PS.photosApplication.selection
+PS.copySelectionAsMarkdown = PS.photosApplication
+    .copySelectionAsMarkdown
 
 
 --   Method definitions are at the end of the file,
@@ -43,7 +63,6 @@ local function info(message)
 	print(message)
 	return message
 end
-
 
 local function aFileIn(dir)
 	for file in hs.fs.dir(dir) do
@@ -303,15 +322,24 @@ function PS:configure(config)
 		if config.name then self.config.name = config.name end
 		if config.host then self.config.host = config.host end
 		if config.port then self.config.port = config.port end
+		if config.origin then
+			self.photosApplication.origin = config.origin
+		end
 	end
 	return self
 end
 
--- The keybindings should belong in another spoon, but
--- they are included here in case they're not availabe elsewhere
-PS.photosApplication = dofile(
-	hs.spoons.resourcePath'photosApplication.lua'
-)
-PS.photosSelection = PS.photosApplication.selection
+-- This method will be removed
+-- when photosApplication is moved to its own spoon
+---@param mapping table
+---@return PhotosServer
+function PS:bindHotkeys(mapping)
+	local spec = {
+		copyMarkdown = PS.photosApplication
+		    .copySelectionAsMarkdown,
+	}
+	hs.spoons.bindHotkeysToSpec(spec, mapping)
+	return self
+end
 
 return PS

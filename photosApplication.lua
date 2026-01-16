@@ -16,7 +16,10 @@
 ---| 'keywords' | 'name' | 'description' | 'favorite' | 'date' | 'id'
 ---| 'height' | 'width' | 'filename' | 'altitude' | 'size' | 'location'
 
-local Photos = {}
+local Photos = {
+	origin = 'http://localhost:6330',
+}
+
 
 ---@vararg MediaItemKey? a list of properties to retrieve, nil for all
 ---@return {}|[MediaItem]? selection empty table if no selection, nil on error
@@ -54,6 +57,46 @@ const getProps=(propNames)=> Application("Photos").selection().map(
 getProps(]] .. hs.json.encode{ ... } .. ')'
 	)
 	return array, err
+end
+
+---@type fun(table, function): table
+local imap = hs.fnutils.imap
+
+local function notify(message, subtitle)
+	hs.notify.show('Apple Photos', subtitle or '', message)
+end
+
+local function altText(self)
+	return self.name or self.description
+	    or self.keywords and self.keywords[1]
+	    or self.filename
+end
+local function toMarkdown(self)
+	D(self)
+	return string.format(
+		'![%s](%s/%s)', altText(self), Photos.origin,
+		-- id doesn't require the /... suffix
+		self.id:gsub('/.*$', '')
+	)
+end
+---@rerturn integer? number of items copied, nil on error
+function Photos:copySelectionAsMarkdown()
+	local selection = Photos.selection() -- all properties
+	if selection == nil then return nil end -- unexpected error
+	if #selection > 0 then
+		hs.pasteboard.setContents(table.concat(
+			imap(selection, toMarkdown), '\n'
+		))
+		notify(string.format(
+			'Copied %d %s to clipboard.',
+			#selection,
+			#selection == 1 and 'markdown link' or
+			'markdown links'
+		))
+	else
+		notify'Nothing selected to copy.'
+	end
+	return #selection
 end
 
 return Photos
