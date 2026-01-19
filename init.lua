@@ -129,17 +129,17 @@ exportItem=(item)=>{
 try{
 	item=app.mediaItems.byId(identifier)
 	exportItem(item);
-	true
+	identifier
 } catch {
 	item=app.search( {for:identifier} )[0]
 	if (item) {
 		exportItem(item);
-		true;
+		item.id();
 	}
 }
 
 ]]
-	print(jxa)
+	-- print(jxa)
 	return hs.osascript.javascript(jxa)
 end
 
@@ -156,9 +156,9 @@ local function loadMediaItem(identifier, destination, basename)
 	basename = basename or identifier
 
 	local ok, found, err = exportMediaItem(identifier, destination)
-	if not ok then error('JXA error:\n' .. hs.json.encode(err)) end
+	if not ok then error('JXA error:\n' .. hs.json.encode(err, true)) end
 	if found then
-		info('-- MediaItem found for: ' .. identifier)
+		info('-- MediaItem found: ' .. found)
 		local path = assert(
 			aFileIn(destination),
 			'No file found in directory: ' .. destination
@@ -213,7 +213,6 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 	local urlParts = hs.http.urlParts(path)
 	local uuid = urlParts.pathComponents[2] -- first component is /
 	local basename = urlParts.lastPathComponent or ''
-	print('uuid:', uuid, 'basename:', basename)
 
 	-- load the contents of the media item and its appropriate headers
 	-- if no media item is found this will be a 404 response
@@ -264,7 +263,7 @@ function PhotosServer:init()
 	local error = { content = loadResource'error500.svg' }
 	error.header = {
 		['Content-Type'] = 'svg+xml',
-		['Content-Length'] = #error.content,
+		['Content-Length'] = tostring(#error.content),
 	}
 	PhotosServer.serverError = function ()
 		return error.content, 500, error.header
