@@ -131,8 +131,10 @@ end
 --
 ---@param uuid string the uuid of the media item
 ---@param destination string the temporary directory to use
+---@param basename string the basename to use in the content-disposition header
 ---@return integer code, table headers, string content
-local function loadMediaItem(uuid, destination)
+local function loadMediaItem(uuid, destination, basename)
+	basename = basename or uuid
 	if exportMediaItem(uuid, destination) then
 		local path = assert(
 			aFileIn(destination),
@@ -140,7 +142,7 @@ local function loadMediaItem(uuid, destination)
 		)
 		info('-- Mediaitem exported to: ' .. path)
 		-- filename = uuid + extension of exported file
-		return 200, readFile(path, uuid .. path:match'%..*$')
+		return 200, readFile(path, basename .. path:match'%..*$')
 	else
 		info('-- MediaItem not found for: ' .. uuid)
 		return 404, readFile(PhotosServer.static[404])
@@ -183,13 +185,19 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 		return PhotosServer.serverError()
 	end
 
+	---@type table
+	---@diagnostic disable-next-line: assign-type-mismatch
+	local urlParts = hs.http.urlParts(path)
+	local uuid = urlParts.pathComponents[2] -- first component is /
+	local basename = urlParts.lastPathComponent or ''
+
 	-- load the contents of the media item and its appropriate headers
 	-- if no media item is found this will be a 404 response
 	local ok, code, headers, content = xpcall(
 		loadMediaItem, info,
 		-- the Photos App ignores anything that comes after a valid uuid
 		-- so we only need to strip of the leading /
-		path:sub(2), tempDir
+		uuid, tempDir, basename
 	)
 
 	-- remove the temporary directory and the file within
