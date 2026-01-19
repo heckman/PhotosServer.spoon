@@ -138,11 +138,11 @@ local function loadMediaItem(uuid, destination)
 			aFileIn(destination),
 			'No file found in directory: ' .. destination
 		)
-		info('-- Mediaedia item exported to: ' .. path)
+		info('-- Mediaitem exported to: ' .. path)
 		-- filename = uuid + extension of exported file
 		return 200, readFile(path, uuid .. path:match'%..*$')
 	else
-		info('-- Media item not found for: ' .. uuid)
+		info('-- MediaItem not found for: ' .. uuid)
 		return 404, readFile(PhotosServer.static[404])
 	end
 end
