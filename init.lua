@@ -105,23 +105,42 @@ end
 --
 ---@param identifier string the uuid of the media item
 ---@param destination string the directory to export the file to
----@return boolean successful
+---@return boolean success
+---@return string found?
+---@return string|table error
 local function exportMediaItem(identifier, destination)
 	---@class hs.osascript
 	---@field javascript fun(source: string): boolean, any?, string|table
 
-	return ( -- only return the first value
-		hs.osascript.javascript(
-			string.format(
-				[[
-Application("Photos").export(
-	[Application("Photos").mediaItems.byId("%s")],
-	{ to:Path("%s"), usingOriginals:%s }
-);]],
-				identifier, destination, 'false'
-			)
-		)
+	identifier = hs.json.encode{ identifier }
+	destination = hs.json.encode{ destination }
+	local jxa = [[
+identifier = ]] .. identifier .. [[[0];
+destination = ]] .. destination .. [[[0];
+app=Application("Photos");
+exportItem=(item)=>{
+	app.export(
+		[item], {
+			to:Path(destination),
+			usingOriginals: false
+		}
 	)
+}
+try{
+	item=app.mediaItems.byId(identifier)
+	exportItem(item);
+	true
+} catch {
+	item=app.search( {for:identifier} )[0]
+	if (item) {
+		exportItem(item);
+		true;
+	}
+}
+
+]]
+	print(jxa)
+	return hs.osascript.javascript(jxa)
 end
 
 -- Return the headers and contents of a media item to be served
@@ -129,13 +148,17 @@ end
 -- The item needs to be exported to a temporary directory,
 -- then loaded by the server to included in an HTTP response.
 --
----@param uuid string the uuid of the media item
+---@param identifier string the uuid of the media item or a search query
 ---@param destination string the temporary directory to use
 ---@param basename string the basename to use in the content-disposition header
 ---@return integer code, table headers, string content
-local function loadMediaItem(uuid, destination, basename)
-	basename = basename or uuid
-	if exportMediaItem(uuid, destination) then
+local function loadMediaItem(identifier, destination, basename)
+	basename = basename or identifier
+
+	local ok, found, err = exportMediaItem(identifier, destination)
+	if not ok then error('JXA error:\n' .. hs.json.encode(err)) end
+	if found then
+		info('-- MediaItem found for: ' .. identifier)
 		local path = assert(
 			aFileIn(destination),
 			'No file found in directory: ' .. destination
@@ -144,7 +167,7 @@ local function loadMediaItem(uuid, destination, basename)
 		-- filename = uuid + extension of exported file
 		return 200, readFile(path, basename .. path:match'%..*$')
 	else
-		info('-- MediaItem not found for: ' .. uuid)
+		info('-- MediaItem not found for: ' .. identifier)
 		return 404, readFile(PhotosServer.static[404])
 	end
 end
@@ -190,6 +213,7 @@ local function httpHandler(method, path, requestHeaders, requestBody)
 	local urlParts = hs.http.urlParts(path)
 	local uuid = urlParts.pathComponents[2] -- first component is /
 	local basename = urlParts.lastPathComponent or ''
+	print('uuid:', uuid, 'basename:', basename)
 
 	-- load the contents of the media item and its appropriate headers
 	-- if no media item is found this will be a 404 response
