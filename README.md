@@ -19,27 +19,19 @@ that will show that image. It looks like this:
 
 ![](https://github.com/user-attachments/assets/16ac318c-68bb-4076-a2af-77be5abd7f88)
 
-The link for that image is http://photos.local/31F5FDDB-26D6-4EF6-A9E7-4A636F6E6EE2,
-which resolves to this server, which fetches the image from Apple Photos.
+The link for the image in the video is http://photos.local/31F5FDDB-26D6-4EF6-A9E7-4A636F6E6EE2,
+which is served by this spoon, fetching the photo from Apple Photos by specifying its uuid.
 
-The hotkey to copy the markdown link is not currently implemented here.
-It's something I wrote earlier. I will incorporate it into this project soon.
-Like tomorrow soon. By the end of the week at the latest.
+## Usage
+
+I have written a sister spoon [Photos.spoon](http://github.com/heckman/photos.spoon) which provides hotkey bindings to copy markdown links for the media items currently selected in the Photos application.
 
 ## Installation
-
-### Manual Installation
 
 Download the two `.lua` files and the `resources` directory
 and put them a directory named `PhotosServer`
 within your Spoons directory.
 
-There is also a [command-line utitlity](#bonus) included
-in the `cli` directory that might be useful.
-
-### Automatic Installation
-
-This has not yet been implemented.
 When I figure out how,
 I'll have github generate a zip file with the packaged Spoon.
 
@@ -64,41 +56,28 @@ hs.loadspoon("PhotosServer"):start()
 
 This will listen to port _6330_ on _localhost_.
 
-### API
+You can also start the server with custom settings in a single line such as:
 
-#### Properties
+```lua
+hs.spoons.use("PhotoServer",{config={port=8080},start=true})
+```
+
+These are the available methods and settings:
+
+### Methods
+
+- **PhotosServer:start()** starts the HTTP server.
+- **PhotosServer:stop( )** stops the HTTP server.
+
+### Settings
 
 PhotosServer has three properties that configure the HTTP server:
 
-- **host** _string_ : The address on which to serve; the default is **_127.0.0.1_**.
-- **port** _integer_ : The port to listen to; the default is **_6330_**. Note that the system will prevent you from setting this to a small number.
-- **bonjour** _string?_ : An optional name. The HTTP server will advertise itself with Bonjour using this name. (This is not the hostname of the server.) By default it is unset.
+- **PhotosServer.host** _string_ : The address on which to serve; the default is **_127.0.0.1_**.
 
-#### Methods
+- **PhotosServer.port** _integer_ : The port to listen to; the default is **_6330_**. Note that the system will prevent you from setting this to a small number.
 
-- **PhotosServer:start(** \[ _config-table_ \] **)** starts the HTTP server, If the optional _config-table_ is specified then the configure method will be called with it prior to starting the server.
-- **PhotosServer:stop( )** stops the HTTP server.
-- **PhotosServer:configure(** _config-table_ **)** if _config-table_ is not nil or empty, each of its keys will set
-  and option. Options not included in the table are not affected. The available options are:
-
-## Usage
-
-When the server is running, the address
-`http://localhost:6330/<UUID>`
-will provide the media item from the Photos library with that particular UUID.
-
-I have written a sister spoon [Photos.spoon](http://github.com/heckman/photos.spoon) which provides hotkey bindings to copy markdown links that resolve to the media items currently selected in the Photos application.
-
-## Bonus
-
-This Spoon includes a command-line utility
-called `photos-selection`
-that will print a json array of the media items
-currently selected in the Photos application.
-You could put a symbolic link to it somewhere on your path.
-
-This too will be split off with the functions
-into another spoon in the near future.
+- **PhotosServer.bonjour** _string?_ : An optional name. The HTTP server will advertise itself with Bonjour using this name. (This is not the hostname of the server.) By default it is unset.
 
 ---
 
@@ -113,62 +92,64 @@ This section explains how I set that up..
 > Don't do this unless you know what you're doing.
 > If it goes horribly bad it is absolutely not my fault.
 
-Also, these instructions are in their first draft,
-so the word usements awkward may be.
-
 To make things pretty we need to listen on port 80.
-Unfortunately its a protected port,
+Unfortunately it is a protected port,
 and often in use by a web server.
 As a work-around we can redirect port 80
 from another one of the loopback addresses.
-I'm using **127.0.0.3**.
+In these intructions we're using **127.0.0.3**.
 
 There are two steps.
 
-1. Redirect 127.0.0.3:80 to 127.0.0.1:6330
+### Redirect **127.0.0.3:80** to **127.0.0.1:6330**
 
-   - Copy the file `ca.heckman.photos-server` to `/etc/pf.anchors/` using *sudo*.
-   - Copy the file `ca.heckman.photos-server.plist` to `/Library/LaunchDaemons/`, also with *sudo*.
-   - And load the launch daemon:
-     ```shell
-     sudo launchctl load -w /Library/LaunchDaemons/ca.heckman.photos-server.plist
-     ```
-     This should enable the redirect immediately,
-     and it should persist after restarts and system updates.
+- Copy the file `ca.heckman.photos-server`
+  to `/etc/pf.anchors/` using _sudo_.
+  This defines the custom redirect rule.
+- Copy the file `ca.heckman.photos-server.plist`
+  to `/Library/LaunchDaemons/`, also with _sudo_.
+  This file tells the system to enable the packet filter
+  and to apply the redirect rule.
+- Then load the launch daemon:
+  ```shell
+  sudo launchctl load -w /Library/LaunchDaemons/ca.heckman.photos-server.plist
+  ```
 
-   > Aside: *I had previously been avoiding using a launch demon*
-   > *by editing the file `/etc/pf.conf` directly,*
-   > *but the settings were lost, either on an update or a reboot.*
+This should enable the redirect immediately,
+and it should persist after restarts and system updates.
 
-   To reverse these changes, unload the launch daemon (replace `load` with `unload`)
-   
-   and then delete the two files.
-   
-2. Set a pretty host name
+> Aside: _I had previously been avoiding using a launch demon_ > _by editing the file `/etc/pf.conf` directly,_ > _but the settings were lost, either on an update or a reboot._
 
-   To get rid of the rest of the numbers,
-   edit the file at `/etc/hosts`,
-   adding a line like this:
-   ```plain-text
-   127.0.0.3       photos.local
-   ```
+To reverse these changes,
+unload the launch daemon (replace `load` with `unload`)
+and then delete the two files.
 
-   Now a request for **photos.local**
-   will re resolved to **127.0.0.3:80**
-   which will be redirected to **127.0.0.1:6330**.
+### Set a pretty host name
 
-   > Aside: _I previously tried using plain `photos`
-   > as the host name but my browser kept appending `.com` to it.
-   > I also tried `photos.app` but my clients
-   > (Safari and Typora)
-   > didn't feel safe accessing it without `https:`.
-   > For this reason, I recommend a `local` suffix,
-   > for which `http` is acceptable._
-   >
-   > _I also tried to use the Bonjour service
-   > to avoid having to do this step,
-   > but the Bonjour name is not the same thing
-   > as the hostname_
+To get rid of the rest of the numbers,
+edit the file at `/etc/hosts`,
+adding a line like this:
+
+```plain-text
+127.0.0.3       photos.local
+```
+
+Now a request for **photos.local**
+will re resolved to **127.0.0.3:80**
+which will be redirected to **127.0.0.1:6330**.
+
+> Aside: _I previously tried using plain `photos`
+> as the host name but my browser kept appending `.com` to it.
+> I also tried `photos.app` but my clients
+> (Safari and Typora)
+> didn't feel safe accessing it without `https:`.
+> For this reason, I recommend a `local` suffix,
+> for which `http` is acceptable._
+>
+> _I also tried to use the Bonjour service
+> to avoid having to do this step,
+> but the Bonjour name is not the same thing
+> as the hostname_
 
 I've included scripts
 in the advanced-installation/scripts directory,
@@ -180,8 +161,8 @@ But don't. Danger. Warning.
 ## License
 
 The project is shared under the MIT License
-except for the contents of the `/resources` directory,
-which contains copies of the Apple Photos icon
+except for the contents of the `/resources` directory.
+These resources include copies of the Apple Photos icon
 as well as SVG versions of two historic icons:
 
 - The 'broken image' icon was created for Netscape Navigator
