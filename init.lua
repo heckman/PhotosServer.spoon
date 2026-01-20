@@ -112,7 +112,7 @@ local function exportMediaItem(identifier, destination)
 	---@class hs.osascript
 	---@field javascript fun(source: string): boolean, any?, string|table
 
-	identifier = hs.json.encode{ identifier }
+	identifier = hs.json.encode{ identifier }:gsub('[.+~]', ' ')
 	destination = hs.json.encode{ destination }
 	local jxa = [[
 identifier = ]] .. identifier .. [[[0];
@@ -139,7 +139,6 @@ try{
 }
 
 ]]
-	-- print(jxa)
 	return hs.osascript.javascript(jxa)
 end
 
