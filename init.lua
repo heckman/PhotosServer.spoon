@@ -14,7 +14,17 @@ local PhotosServer = {
 	-- default config:
 	host = 'localhost',
 	port = 6330,
-	bonjour = nil, -- advertised by Bonjour by this name
+	bonjour = nil,        -- advertised by Bonjour by this name
+	maxSize = 210 * 1024 * 1024, -- in bytes. 403 http error if too big
+	-- 210 MiB = 220,200,960 bytes
+	--
+	-- NOTES ON SIZE LIMITS
+	-- I think the issue is more about processing time rather than just size
+	-- this was fine:
+	-- DCE37A4F-1706-4564-B50D-D02A55A6FB7C	IMG_1420.MOV	211569213
+	-- took a very long time but didn't crash hammerspoon:
+	-- D2369819-DB45-4996-8B57-706C86542753	IMG_E2512.MOV	212583715
+	-- didn't crash, but probably blocked everything for a while.
 }
 
 ---@class PhotosServer
@@ -30,9 +40,9 @@ local PhotosServer = {
 --=  Local functions
 ---
 
-local function info(message)
-	print(message)
-	return message
+local function info(...)
+	print(...)
+	return ...
 end
 
 local function aFileIn(dir)
@@ -106,15 +116,14 @@ end
 ---@param identifier string the uuid of the media item
 ---@param destination string the directory to export the file to
 ---@return boolean success
----@return string found?
+---@return [string,table]? found [status,props]
 ---@return string|table error
 local function exportMediaItem(identifier, destination)
-	---@class hs.osascript
-	---@field javascript fun(source: string): boolean, any?, string|table
-
+	local max_size = PhotosServer.maxSize
 	identifier = hs.json.encode{ identifier }:gsub('[.+~]', ' ')
 	destination = hs.json.encode{ destination }
 	local jxa = [[
+maxSize = ]] .. max_size .. [[;
 identifier = ]] .. identifier .. [[[0];
 destination = ]] .. destination .. [[[0];
 app=Application("Photos");
@@ -128,17 +137,25 @@ exportItem=(item)=>{
 }
 try{
 	item=app.mediaItems.byId(identifier)
-	exportItem(item);
-	identifier
+	props=item.properties();
 } catch {
 	item=app.search( {for:identifier} )[0]
-	if (item) {
-		exportItem(item);
-		item.id();
-	}
+	if (item) props=item.properties();
 }
-
+if (item) {
+	if (props.size>maxSize) {
+		['TOO_BIG', props]
+	} else {
+		exportItem(item);
+		['OK',props]
+	}
+} else {
+	[]
+}
 ]]
+	---@class hs.osascript
+	---@field javascript fun(source: string): boolean, any?, string|table
+
 	return hs.osascript.javascript(jxa)
 end
 
@@ -156,8 +173,19 @@ local function loadMediaItem(identifier, destination, basename)
 
 	local ok, found, err = exportMediaItem(identifier, destination)
 	if not ok then error('JXA error:\n' .. hs.json.encode(err, true)) end
-	if found then
-		info('-- MediaItem found: ' .. found)
+	---@cast found -nil
+
+	if #found == 0 then
+		info('-- MediaItem not found for: ' .. identifier)
+		return 404, readFile(PhotosServer.static[404])
+	end
+
+	info(
+		'-- MediaItem found:',
+		found[2].id, found[2].filename, found[2].size
+	)
+
+	if found[1] == 'OK' then
 		local path = assert(
 			aFileIn(destination),
 			'No file found in directory: ' .. destination
@@ -165,9 +193,14 @@ local function loadMediaItem(identifier, destination, basename)
 		info('-- Mediaitem exported to: ' .. path)
 		-- filename = uuid + extension of exported file
 		return 200, readFile(path, basename .. path:match'%..*$')
+	elseif found[1] == 'TOO_BIG' then
+		info(string.format(
+			'-- MediaItem too big to be served! %.1f MB',
+			found[2].size / 1024 / 1024
+		))
+		return 403, readFile(PhotosServer.static[403])
 	else
-		info('-- MediaItem not found for: ' .. identifier)
-		return 404, readFile(PhotosServer.static[404])
+		error'Unexpected JXA response'
 	end
 end
 
@@ -181,7 +214,7 @@ end
 ---@param requestBody string
 ---@return string, integer, table
 local function httpHandler(method, path, requestHeaders, requestBody)
-	info('\n-- http request:' .. method .. '\t"' .. path .. '"')
+	info('\n-- http request:', method, '"' .. path .. '"')
 
 	-- we only accept GET requests
 	if method ~= 'GET' then
@@ -271,6 +304,7 @@ function PhotosServer:init()
 	-- don't preload the other static responses
 	PhotosServer.static = {
 		[404] = resourcePath'error404.svg',
+		[403] = resourcePath'too-big.svg',
 		['/favicon.ico'] = resourcePath'favicon.ico',
 		['/apple-touch-icon.png'] = resourcePath'apple-touch-icon.png',
 	}

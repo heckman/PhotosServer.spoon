@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg width="100%"
+  viewBox="0 0 666 666" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <g id="g1067">
+    <circle cx="333" cy="333" r="250" fill="white" stroke="#eb161e" stroke-width="6px" />
+    <circle cx="333" cy="333" r="236" fill="#eb161e" stroke="#eb161e" stroke-width="6px" />
+    <rect x="120.5" y="283" width="425" height="100" rx="21" ry="21" fill="white" />
+    <text x="183.312px" y="358.74px"
+      style="font-family:'HelveticaNeue-Bold', 'Helvetica Neue';font-weight:700;font-size:72px;">TOO BIG</text>
+  </g>
+</svg>
